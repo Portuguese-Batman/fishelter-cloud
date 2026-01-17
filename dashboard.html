@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minha Nuvem - Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="dash-body">
+    
+    <header class="dash-header">
+        <div class="logo-area">
+            <i class="fas fa-cloud" style="color: var(--primary);"></i> Fishelter Cloud
+        </div>
+        
+        <div class="search-bar">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchInput" placeholder="Pesquisar ficheiros...">
+        </div>
+
+        <div style="display: flex; gap: 15px; align-items: center;">
+            <span id="userDisplay" style="font-weight: 600; color: var(--primary);"></span>
+            <button class="btn btn-primary" id="openUploadBtn">
+                <i class="fas fa-cloud-upload-alt"></i> <span style="display: none; @media(min-width: 600px){display:inline;}">Upload</span>
+            </button>
+            <button class="btn btn-text" id="logoutBtn" title="Sair">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="dash-container">
+        <aside class="sidebar">
+            <nav style="flex: 1;">
+                <button class="nav-item active" onclick="filterFiles('all', this)">
+                    <i class="fas fa-folder"></i> Todos os Ficheiros
+                </button>
+                <button class="nav-item" onclick="filterFiles('image', this)">
+                    <i class="fas fa-image"></i> Imagens
+                </button>
+                <button class="nav-item" onclick="filterFiles('video', this)">
+                    <i class="fas fa-video"></i> Vídeos
+                </button>
+                <button class="nav-item" onclick="filterFiles('document', this)">
+                    <i class="fas fa-file-alt"></i> Documentos
+                </button>
+            </nav>
+
+            <div class="storage-widget">
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                    <span>Armazenamento</span>
+                    <span id="storageText">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 0%;"></div>
+                </div>
+                <small style="color: var(--text-muted);">Espaço do Servidor</small>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <h2 id="pageTitle" style="margin-bottom: 1rem; color: #374151;">Todos os Ficheiros</h2>
+            
+            <div id="fileGrid" class="grid-files">
+                </div>
+
+            <div id="emptyState" class="hidden" style="text-align: center; margin-top: 4rem; color: var(--text-muted);">
+                <i class="fas fa-folder-open" style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.3;"></i>
+                <p>Nenhum ficheiro encontrado.</p>
+            </div>
+        </main>
+    </div>
+
+    <div id="uploadModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h3>Carregar Ficheiro</h3>
+            <div class="upload-dropzone" id="dropZone">
+                <i class="fas fa-cloud-arrow-up" style="font-size: 3rem; color: var(--primary); margin-bottom: 1rem;"></i>
+                <p>Arraste ficheiros aqui ou clique para selecionar</p>
+                <input type="file" id="fileInput" multiple hidden>
+            </div>
+            <button class="btn btn-text" onclick="closeModal('uploadModal')">Cancelar</button>
+        </div>
+    </div>
+
+    <div id="previewModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 800px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                <h3 id="previewTitle">Ficheiro</h3>
+                <button class="btn btn-text" onclick="closeModal('previewModal')"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="previewBody" style="background: #f1f5f9; min-height: 300px; display: flex; align-items: center; justify-content: center; border-radius: 8px; margin-bottom: 1rem;">
+                </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
