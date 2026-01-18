@@ -40,4 +40,27 @@ if ($action === 'logout') {
     session_destroy();
     sendJson(['success' => true]);
 }
+
+// 4. REGISTO (Adiciona isto no final do ficheiro)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'register') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $user = $input['username'] ?? '';
+    $pass = $input['password'] ?? '';
+
+    if (empty($user) || empty($pass)) {
+        sendJson(['success' => false, 'message' => 'Dados incompletos'], 400);
+    }
+
+    // Cria o hash seguro que o password_verify exige
+    $hashedPass = password_hash($pass, PASSWORD_DEFAULT);
+
+    $stmt = $conn->prepare("INSERT INTO usuarios (nome, senha) VALUES (?, ?)");
+    $stmt->bind_param("ss", $user, $hashedPass);
+    
+    if ($stmt->execute()) {
+        sendJson(['success' => true, 'message' => 'Utilizador criado com sucesso!']);
+    } else {
+        sendJson(['success' => false, 'message' => 'Erro: Utilizador já existe'], 409);
+    }
+}
 ?>
