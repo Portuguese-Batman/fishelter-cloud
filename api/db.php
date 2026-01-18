@@ -1,10 +1,10 @@
 <?php
 // Configurações de Base de Dados
+// No ficheiro api/db.php
 define('DB_HOST', 'localhost');
 define('DB_USER', 'admin_site');
-define('DB_PASS', 'sua_senha_aqui'); // <-- COLOQUE A SUA SENHA DA BD
+define('DB_PASS', 'endyprincesa'); // Garante que esta senha está correta!
 define('DB_NAME', 'nuvem_caseira');
-
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 try {
