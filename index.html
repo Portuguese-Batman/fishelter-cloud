@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fishelter Cloud - A Sua Nuvem Pessoal</title>
+    <script>
+        (function () {
+            const savedTheme = localStorage.getItem('fishelter-theme');
+            const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            const theme = savedTheme || systemTheme;
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.style.colorScheme = theme;
+        })();
+    </script>
+    <meta name="description" content="Guarde as suas fotos e ficheiros na nuvem sem ocupar espaco no telemovel. Acesso em qualquer lugar, a qualquer hora.">
+    <meta name="theme-color" content="#4f46e5">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --primary-light: #eef2ff;
+            --accent: #06b6d4;
+            --accent2: #8b5cf6;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --white: #ffffff;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --surface-alt: #f8fafc;
+            --border-color: rgba(229,231,235,0.8);
+            --radius: 16px;
+        }
+
+        [data-theme="dark"] {
+            --text-main: #e5e5e5;
+            --text-muted: #a3a3a3;
+            --white: #111111;
+            --bg: #0f0f0f;
+            --surface: #1a1a1a;
+            --surface-alt: #131313;
+            --border-color: #2a2a2a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            color: var(--text-main);
+            background: var(--bg);
+            overflow-x: hidden;
+            transition: background-color 200ms ease, color 200ms ease;
+        }
+        body, body * { transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease; }
+
+        [data-theme="dark"] .navbar {
+            background: rgba(17, 17, 17, 0.85);
+            border-bottom-color: rgba(42, 42, 42, 0.8);
+        }
+        [data-theme="dark"] .mobile-menu {
+            background: rgba(17, 17, 17, 0.97);
+            border-bottom-color: rgba(42, 42, 42, 0.8);
+        }
+
+        .navbar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 5%;
+            height: 70px;
+            background: rgba(255,255,255,0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(229,231,235,0.8);
+            transition: box-shadow 0.3s;
+        }
+        .navbar.scrolled { box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            font-size: 1.25rem;
+            color: var(--text-main);
+            text-decoration: none;
+        }
+        .nav-logo-icon {
+            width: 38px; height: 38px;
+            background: linear-gradient(135deg, var(--primary), var(--accent2));
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            color: white;
+            font-size: 1rem;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            list-style: none;
+        }
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 0.95rem;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover { color: var(--primary); }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .theme-toggle {
+            width: 42px; height: 42px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.65); color: var(--text-main); border: 1px solid var(--border-color);
+            padding: 0;
+        }
+        .theme-toggle:hover { background: var(--primary-light); color: var(--primary); }
+
+        .btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 0.6rem 1.4rem;
+            border-radius: 10px;
+            font-weight: 600; font-size: 0.9rem;
+            cursor: pointer; border: none;
+            text-decoration: none;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-main);
+            border: 1.5px solid #e5e7eb;
+        }
+        .btn-ghost:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--accent2));
+            color: white;
+            box-shadow: 0 4px 14px rgba(79,70,229,0.35);
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(79,70,229,0.45); }
+        .btn-pwa {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            box-shadow: 0 4px 14px rgba(16,185,129,0.35);
+        }
+        .btn-pwa:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(16,185,129,0.45); }
+        .btn-pwa.hidden-pwa { display: none; }
+        .btn-lg { padding: 0.9rem 2rem; font-size: 1.05rem; border-radius: 12px; }
+
+        .hamburger {
+            display: none;
+            flex-direction: column; gap: 5px;
+            cursor: pointer; padding: 4px;
+            background: none; border: none;
+        }
+        .hamburger span {
+            display: block; width: 24px; height: 2px;
+            background: var(--text-main);
+            border-radius: 2px;
+            transition: all 0.3s;
+        }
+
+        /* ===== MOBILE MENU ===== */
+        .mobile-menu {
+            display: none;
+            position: fixed;
+            top: 70px; left: 0; right: 0;
+            background: rgba(255,255,255,0.97);
+            backdrop-filter: blur(16px);
+            padding: 1.5rem 5%;
+            z-index: 999;
+            border-bottom: 1px solid #e5e7eb;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .mobile-menu.open { display: flex; }
+        .mobile-menu a {
+            text-decoration: none;
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 1rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        /* ===== HERO ===== */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding: 120px 5% 80px;
+            position: relative;
+            overflow: hidden;
+        }
+        .hero-bg {
+            position: absolute; inset: 0; z-index: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #06b6d4 100%);
+        }
+        .hero-bg::after {
+            content: '';
+            position: absolute; inset: 0;
+            background: radial-gradient(ellipse at 70% 50%, rgba(255,255,255,0.08) 0%, transparent 60%);
+        }
+        .hero-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            animation: float 8s ease-in-out infinite;
+        }
+        .hero-orb-1 { width: 500px; height: 500px; background: #a78bfa; top: -100px; right: -100px; }
+        .hero-orb-2 { width: 350px; height: 350px; background: #06b6d4; bottom: -80px; left: -80px; animation-delay: -4s; }
+        @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-30px)} }
+
+        .hero-content {
+            position: relative; z-index: 1;
+            max-width: 640px;
+        }
+        .hero-badge {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.25);
+            color: white;
+            padding: 0.4rem 1rem;
+            border-radius: 50px;
+            font-size: 0.85rem; font-weight: 600;
+            margin-bottom: 1.5rem;
+        }
+        .hero-title {
+            font-size: clamp(2.2rem, 5vw, 3.8rem);
+            font-weight: 800;
+            color: white;
+            line-height: 1.15;
+            margin-bottom: 1.25rem;
+        }
+        .hero-title span {
+            background: linear-gradient(90deg, #fbbf24, #f472b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero-subtitle {
+            font-size: 1.15rem;
+            color: rgba(255,255,255,0.85);
+            line-height: 1.7;
+            margin-bottom: 2.5rem;
+        }
+        .hero-actions {
+            display: flex; flex-wrap: wrap; gap: 14px;
+        }
+
+        /* ===== FLOATING CARD VISUAL ===== */
+        .hero-visual {
+            position: absolute;
+            right: 5%;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 1;
+            width: min(440px, 42vw);
+        }
+        .browser-mockup {
+            background: rgba(255,255,255,0.12);
+            backdrop-filter: blur(18px);
+            border: 1px solid rgba(255,255,255,0.22);
+            border-radius: 24px;
+            padding: 1rem;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.3);
+            animation: float 4s ease-in-out infinite;
+        }
+        .browser-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.65rem 0.8rem; border-radius: 14px 14px 0 0;
+            background: rgba(255,255,255,0.18);
+            margin-bottom: 0.8rem;
+        }
+        .browser-dots { display: flex; gap: 0.4rem; }
+        .browser-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .browser-dot.red { background: #ff5f56; }
+        .browser-dot.yellow { background: #ffbd2e; }
+        .browser-dot.green { background: #27c93f; }
+        .browser-address {
+            flex: 1; margin-left: 0.8rem; padding: 0.35rem 0.7rem; border-radius: 999px; background: rgba(255,255,255,0.18);
+            font-size: 0.78rem; color: rgba(255,255,255,0.9); text-align: center;
+        }
+        .browser-content {
+            border-radius: 0 0 16px 16px; overflow: hidden; background: rgba(248,250,252,0.95); color: #111827;
+        }
+        .browser-sidebar {
+            display: grid; grid-template-columns: 90px 1fr; min-height: 260px;
+        }
+        .browser-nav { background: #f3f4f6; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.4rem; }
+        .browser-nav-item {
+            height: 34px; border-radius: 8px; background: rgba(79,70,229,0.12); display: flex; align-items: center; justify-content: center;
+            color: var(--primary); font-size: 0.9rem;
+        }
+        .browser-main { padding: 0.9rem; display: grid; gap: 0.7rem; }
+        .browser-topbar { display: flex; justify-content: space-between; align-items: center; }
+        .browser-chip { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.6rem; border-radius: 999px; background: #eef2ff; color: var(--primary); font-size: 0.72rem; font-weight: 700; }
+        .browser-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
+        .browser-card { border-radius: 10px; background: linear-gradient(135deg, #f8fafc, #e2e8f0); min-height: 56px; border: 1px solid #e5e7eb; }
+        .browser-card.large { min-height: 86px; }
+        .browser-card.accent { background: linear-gradient(135deg, #dbeafe, #e0f2fe); }
+        .browser-card.purple { background: linear-gradient(135deg, #ede9fe, #f5f3ff); }
+        .browser-card.green { background: linear-gradient(135deg, #dcfce7, #ecfccb); }
+        .cloud-feat {
+            display: flex; align-items: center; gap: 10px;
+            color: rgba(255,255,255,0.8); font-size: 0.82rem; font-weight: 500;
+        }
+        .cloud-feat i { font-size: 0.85rem; color: rgba(255,255,255,0.5); width: 16px; text-align: center; }
+
+        /* ===== WAVE DIVIDER ===== */
+        .wave-divider { display: block; margin-top: -2px; }
+
+        /* ===== FEATURES SECTION ===== */
+        .section { padding: 90px 5%; }
+        .section-label {
+            display: inline-block;
+            color: var(--primary);
+            font-weight: 700; font-size: 0.85rem;
+            text-transform: uppercase; letter-spacing: 1px;
+            margin-bottom: 0.75rem;
+        }
+        .section-title {
+            font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+            font-weight: 800;
+            color: var(--text-main);
+            line-height: 1.25;
+            margin-bottom: 1rem;
+        }
+        .section-subtitle {
+            font-size: 1.05rem;
+            color: var(--text-muted);
+            line-height: 1.7;
+            max-width: 560px;
+        }
+        .section-header { margin-bottom: 3.5rem; }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+        .feature-card {
+            background: var(--white);
+            border-radius: var(--radius);
+            padding: 2rem;
+            border: 1px solid #e5e7eb;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        .feature-card::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary), var(--accent2));
+            transform: scaleX(0);
+            transition: transform 0.3s;
+        }
+        .feature-card:hover { transform: translateY(-6px); box-shadow: 0 20px 40px rgba(0,0,0,0.08); border-color: transparent; }
+        .feature-card:hover::before { transform: scaleX(1); }
+
+        .feature-icon {
+            width: 56px; height: 56px;
+            border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.4rem;
+            margin-bottom: 1.25rem;
+        }
+        .icon-indigo { background: #eef2ff; color: var(--primary); }
+        .icon-cyan   { background: #ecfeff; color: #0891b2; }
+        .icon-purple { background: #f5f3ff; color: #7c3aed; }
+        .icon-green  { background: #f0fdf4; color: #16a34a; }
+        .icon-orange { background: #fff7ed; color: #ea580c; }
+        .icon-pink   { background: #fdf2f8; color: #db2777; }
+
+        .feature-title { font-weight: 700; font-size: 1.1rem; margin-bottom: 0.6rem; }
+        .feature-desc { color: var(--text-muted); font-size: 0.95rem; line-height: 1.6; }
+
+        /* ===== HOW IT WORKS ===== */
+        .how-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 90px 5%;
+        }
+        .how-section .section-title { color: white; }
+        .how-section .section-label { color: rgba(255,255,255,0.7); }
+        .how-section .section-subtitle { color: rgba(255,255,255,0.8); }
+
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+        .step-item { text-align: center; }
+        .step-number {
+            width: 64px; height: 64px;
+            background: rgba(255,255,255,0.15);
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem; font-weight: 800; color: white;
+            margin: 0 auto 1.25rem;
+        }
+        .step-title { color: white; font-weight: 700; font-size: 1.05rem; margin-bottom: 0.5rem; }
+        .step-desc { color: rgba(255,255,255,0.75); font-size: 0.9rem; line-height: 1.6; }
+
+        /* ===== PWA SECTION ===== */
+        .pwa-section {
+            padding: 90px 5%;
+            background: var(--bg);
+        }
+        .pwa-card {
+            background: white;
+            border-radius: 24px;
+            padding: 3rem 4rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 3rem;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.06);
+        }
+        .pwa-content { flex: 1; }
+        .pwa-badges { display: flex; gap: 12px; margin-top: 2rem; flex-wrap: wrap; }
+        .pwa-badge {
+            display: flex; align-items: center; gap: 8px;
+            background: #f3f4f6; border-radius: 50px;
+            padding: 0.4rem 1rem; font-size: 0.85rem; font-weight: 600; color: var(--text-muted);
+        }
+        .pwa-badge i { color: var(--primary); }
+        .pwa-visual {
+            flex-shrink: 0;
+            width: 180px; height: 180px;
+            border-radius: 36px;
+            background: linear-gradient(135deg, var(--primary), var(--accent2));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 5rem; color: white;
+            box-shadow: 0 20px 50px rgba(79,70,229,0.35);
+        }
+
+        /* ===== FOOTER ===== */
+        footer {
+            background: #0f172a;
+            color: rgba(255,255,255,0.6);
+            padding: 3rem 5%;
+            text-align: center;
+        }
+        .footer-logo {
+            display: inline-flex; align-items: center; gap: 10px;
+            color: white; font-weight: 700; font-size: 1.15rem;
+            margin-bottom: 1.5rem;
+        }
+        .footer-links {
+            display: flex; justify-content: center; gap: 2rem;
+            flex-wrap: wrap;
+            margin-bottom: 1.5rem;
+            list-style: none;
+        }
+        .footer-links a { color: rgba(255,255,255,0.5); text-decoration: none; font-size: 0.9rem; transition: color 0.2s; }
+        .footer-links a:hover { color: white; }
+        .footer-copy { font-size: 0.85rem; }
+
+        /* ===== SCROLL TO TOP ===== */
+        .scroll-top {
+            position: fixed; bottom: 24px; right: 24px;
+            width: 44px; height: 44px;
+            background: var(--primary);
+            color: white; border: none; border-radius: 50%;
+            cursor: pointer; font-size: 1rem;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 14px rgba(79,70,229,0.4);
+            opacity: 0; pointer-events: none;
+            transition: all 0.3s;
+            z-index: 100;
+        }
+        .scroll-top.visible { opacity: 1; pointer-events: auto; }
+        .scroll-top:hover { transform: translateY(-3px); }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 900px) {
+            .hero-visual { display: none; }
+            .hero { padding: 100px 5% 60px; }
+        }
+        @media (max-width: 768px) {
+            .nav-links, .nav-actions { display: none; }
+            .hamburger { display: flex; }
+            .pwa-card { flex-direction: column; text-align: center; padding: 2rem; }
+            .pwa-badges { justify-content: center; }
+            .hero-stats { gap: 2rem; }
+        }
+        @media (max-width: 480px) {
+            .hero-actions { flex-direction: column; }
+            .hero-actions .btn { justify-content: center; }
+            .hero-stats { flex-wrap: wrap; gap: 1.5rem; }
+        }
+
+        /* ===== ANIMATIONS ===== */
+        .fade-up {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+        .fade-up.visible { opacity: 1; transform: translateY(0); }
+        .fade-up:nth-child(2) { transition-delay: 0.1s; }
+        .fade-up:nth-child(3) { transition-delay: 0.2s; }
+        .fade-up:nth-child(4) { transition-delay: 0.3s; }
+        .fade-up:nth-child(5) { transition-delay: 0.4s; }
+        .fade-up:nth-child(6) { transition-delay: 0.5s; }
+    </style>
+</head>
+<body>
+
+    <!-- NAVBAR -->
+    <nav class="navbar" id="navbar">
+        <a href="#" class="nav-logo">
+            <div class="nav-logo-icon"><i class="fas fa-cloud"></i></div>
+            Fishelter Cloud
+        </a>
+
+        <ul class="nav-links">
+            <li><a href="#funcionalidades">Funcionalidades</a></li>
+            <li><a href="#como-funciona">Como Funciona</a></li>
+            <li><a href="#app">Instalar App</a></li>
+        </ul>
+
+        <div class="nav-actions">
+            <button class="theme-toggle" type="button" data-theme-toggle aria-label="Alternar tema">
+                <i class="fas fa-moon theme-icon"></i>
+            </button>
+            <button id="pwa-btn-nav" class="btn btn-ghost btn-pwa hidden-pwa">
+                <i class="fas fa-download"></i> Instalar App
+            </button>
+            <a href="login.html" class="btn btn-primary">
+                <i class="fas fa-sign-in-alt"></i> Entrar
+            </a>
+        </div>
+
+        <button class="hamburger" id="hamburger" aria-label="Menu">
+            <span></span><span></span><span></span>
+        </button>
+    </nav>
+
+    <!-- MOBILE MENU -->
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="#funcionalidades">Funcionalidades</a>
+        <a href="#como-funciona">Como Funciona</a>
+        <a href="#app">Instalar App</a>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Alternar tema" style="align-self:flex-start; margin-top:0.5rem;">
+            <i class="fas fa-moon theme-icon"></i>
+        </button>
+        <a href="login.html" style="color: var(--primary); font-weight: 700;">
+            <i class="fas fa-sign-in-alt"></i> Entrar na Nuvem
+        </a>
+    </div>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="hero-bg">
+            <div class="hero-orb hero-orb-1"></div>
+            <div class="hero-orb hero-orb-2"></div>
+        </div>
+
+        <div class="hero-content">
+            <div class="hero-badge">
+                <i class="fas fa-cloud"></i> Armazenamento na Nuvem
+            </div>
+            <h1 class="hero-title">
+                A sua nuvem<br>pessoal,<br><span>sempre consigo</span>
+            </h1>
+            <p class="hero-subtitle">
+                Guarde as suas fotos e ficheiros no servidor e aceda a partir de qualquer dispositivo, a qualquer hora.
+            </p>
+            <div class="hero-actions">
+                <a href="login.html" class="btn btn-primary btn-lg">
+                    <i class="fas fa-sign-in-alt"></i> Entrar na Nuvem
+                </a>
+                <button id="pwa-btn-hero" class="btn btn-lg btn-pwa hidden-pwa">
+                    <i class="fas fa-mobile-alt"></i> Baixar App
+                </button>
+                <a href="#como-funciona" class="btn btn-lg" style="background:rgba(255,255,255,0.15); color:white; border:1px solid rgba(255,255,255,0.3); backdrop-filter:blur(8px);">
+                    <i class="fas fa-play-circle"></i> Como funciona
+                </a>
+            </div>
+        </div>
+
+        <!-- Floating visual -->
+        <div class="hero-visual">
+            <div class="browser-mockup">
+                <div class="browser-bar">
+                    <div class="browser-dots">
+                        <span class="browser-dot red"></span>
+                        <span class="browser-dot yellow"></span>
+                        <span class="browser-dot green"></span>
+                    </div>
+                    <div class="browser-address">fishelter.duckdns.org</div>
+                </div>
+                <div class="browser-content">
+                    <div class="browser-sidebar">
+                        <div class="browser-nav">
+                            <div class="browser-nav-item"><i class="fas fa-folder"></i></div>
+                            <div class="browser-nav-item"><i class="fas fa-image"></i></div>
+                            <div class="browser-nav-item"><i class="fas fa-video"></i></div>
+                            <div class="browser-nav-item"><i class="fas fa-file-alt"></i></div>
+                        </div>
+                        <div class="browser-main">
+                            <div class="browser-topbar">
+                                <strong>Todos os Ficheiros</strong>
+                                <span class="browser-chip"><i class="fas fa-cloud-upload-alt"></i> Upload</span>
+                            </div>
+                            <div class="browser-grid">
+                                <div class="browser-card accent"></div>
+                                <div class="browser-card purple"></div>
+                                <div class="browser-card green"></div>
+                                <div class="browser-card large"></div>
+                                <div class="browser-card large accent"></div>
+                                <div class="browser-card large purple"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- WAVE -->
+    <svg class="wave-divider" viewBox="0 0 1440 60" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" style="display:block;background:#f8fafc">
+        <path d="M0,0 C360,60 1080,60 1440,0 L1440,60 L0,60 Z" fill="url(#grad1)"/>
+        <defs>
+            <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color:#667eea"/>
+                <stop offset="100%" style="stop-color:#764ba2"/>
+            </linearGradient>
+        </defs>
+    </svg>
+
+    <!-- FEATURES -->
+    <section class="section" id="funcionalidades">
+        <div class="section-header">
+            <div class="section-label">Funcionalidades</div>
+            <h2 class="section-title">Tudo o que precisa,<br>sem complicacoes</h2>
+            <p class="section-subtitle">Desenhado para ser simples e eficaz. Guarde, aceda e partilhe os seus ficheiros onde estiver.</p>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card fade-up">
+                <div class="feature-icon icon-indigo"><i class="fas fa-cloud-upload-alt"></i></div>
+                <h3 class="feature-title">Upload Instantaneo</h3>
+                <p class="feature-desc">Carregue fotos e ficheiros para o servidor em segundos. Arraste e solte ou selecione diretamente do dispositivo.</p>
+            </div>
+            <div class="feature-card fade-up">
+                <div class="feature-icon icon-cyan"><i class="fas fa-mobile-alt"></i></div>
+                <h3 class="feature-title">Zero Espaco no Telemovel</h3>
+                <p class="feature-desc">Os seus ficheiros ficam guardados no servidor. O seu telemovel fica livre para o que realmente importa.</p>
+            </div>
+            <div class="feature-card fade-up">
+                <div class="feature-icon icon-purple"><i class="fas fa-lock"></i></div>
+                <h3 class="feature-title">Acesso Seguro</h3>
+                <p class="feature-desc">Autenticacao protegida por utilizador e palavra-passe. Os seus ficheiros sao exclusivamente seus.</p>
+            </div>
+            <div class="feature-card fade-up">
+                <div class="feature-icon icon-green"><i class="fas fa-images"></i></div>
+                <h3 class="feature-title">Visualizacao Rapida</h3>
+                <p class="feature-desc">Veja as suas fotos em grelha, abra em preview e organize por tipo de ficheiro com um clique.</p>
+            </div>
+            <div class="feature-card fade-up">
+                <div class="feature-icon icon-orange"><i class="fas fa-download"></i></div>
+                <h3 class="feature-title">Download a Qualquer Hora</h3>
+                <p class="feature-desc">Faca download dos seus ficheiros sempre que precisar, de qualquer dispositivo com acesso a internet.</p>
+            </div>
+            <div class="feature-card fade-up">
+                <div class="feature-icon icon-pink"><i class="fas fa-wifi"></i></div>
+                <h3 class="feature-title">Funciona como App</h3>
+                <p class="feature-desc">Instale o Fishelter Cloud como aplicacao no seu dispositivo atraves de PWA. Sem lojas, sem complicacoes.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="how-section" id="como-funciona">
+        <div class="section-label">Como Funciona</div>
+        <h2 class="section-title">Simples como 1, 2, 3</h2>
+        <p class="section-subtitle">Comece a usar em menos de um minuto. Sem instalacoes, sem configuracoes complicadas.</p>
+
+        <div class="steps-grid">
+            <div class="step-item">
+                <div class="step-number">1</div>
+                <h3 class="step-title">Crie a sua conta</h3>
+                <p class="step-desc">Aceda ao Fishelter Cloud e entre com as suas credenciais de acesso.</p>
+            </div>
+            <div class="step-item">
+                <div class="step-number">2</div>
+                <h3 class="step-title">Carregue as suas fotos</h3>
+                <p class="step-desc">Arraste e solte os seus ficheiros ou selecione-os diretamente do seu dispositivo.</p>
+            </div>
+            <div class="step-item">
+                <div class="step-number">3</div>
+                <h3 class="step-title">Liberte o espaco</h3>
+                <p class="step-desc">Apague as fotos do telemovel. Elas estao seguras no servidor, acessiveis sempre que quiser.</p>
+            </div>
+            <div class="step-item">
+                <div class="step-number">4</div>
+                <h3 class="step-title">Aceda em qualquer lugar</h3>
+                <p class="step-desc">Abra o browser ou instale a app PWA e tenha os seus ficheiros sempre a mao.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- PWA SECTION -->
+    <section class="pwa-section" id="app">
+        <div class="pwa-card">
+            <div class="pwa-content">
+                <div class="section-label">Instalar App</div>
+                <h2 class="section-title" style="margin-bottom:0.75rem">Leve o Fishelter<br>no seu bolso</h2>
+                <p style="color:var(--text-muted);font-size:1rem;line-height:1.7;max-width:480px;">
+                    Instale o Fishelter Cloud como aplicacao no seu telemovel ou computador atraves de PWA (Progressive Web App). Sem loja de aplicacoes, sem espaco desperdicado.
+                </p>
+                <div class="pwa-badges">
+                    <div class="pwa-badge"><i class="fas fa-bolt"></i> Rapido</div>
+                    <div class="pwa-badge"><i class="fas fa-wifi-slash"></i> Funciona offline</div>
+                    <div class="pwa-badge"><i class="fas fa-mobile-alt"></i> Android & iOS</div>
+                    <div class="pwa-badge"><i class="fas fa-desktop"></i> Desktop</div>
+                </div>
+                <div style="margin-top:2rem;display:flex;gap:12px;flex-wrap:wrap">
+                    <button id="pwa-btn-section" class="btn btn-pwa btn-lg hidden-pwa">
+                        <i class="fas fa-download"></i> Baixar App Agora
+                    </button>
+                    <a href="login.html" class="btn btn-primary btn-lg">
+                        <i class="fas fa-globe"></i> Usar no Browser
+                    </a>
+                </div>
+                <p id="pwa-not-available" style="display:none;margin-top:1rem;color:var(--text-muted);font-size:0.9rem;">
+                    <i class="fas fa-info-circle"></i> Para instalar como app, abra esta pagina no browser do seu dispositivo e clique em "Adicionar ao ecra inicial".
+                </p>
+            </div>
+            <div class="pwa-visual">
+                <i class="fas fa-cloud"></i>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+        <div class="footer-logo">
+            <div style="width:32px;height:32px;background:linear-gradient(135deg,#4f46e5,#8b5cf6);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+                <i class="fas fa-cloud" style="color:white;font-size:0.9rem"></i>
+            </div>
+            Fishelter Cloud
+        </div>
+        <ul class="footer-links">
+            <li><a href="#funcionalidades">Funcionalidades</a></li>
+            <li><a href="#como-funciona">Como Funciona</a></li>
+            <li><a href="#app">Instalar App</a></li>
+            <li><a href="login.html">Entrar</a></li>
+        </ul>
+        <p class="footer-copy">&copy; 2024 Fishelter Cloud. Todos os direitos reservados.</p>
+    </footer>
+
+    <!-- SCROLL TO TOP -->
+    <button class="scroll-top" id="scrollTop" title="Voltar ao topo">
+        <i class="fas fa-arrow-up"></i>
+    </button>
+
+    <script>
+        function applyTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.style.colorScheme = theme;
+            localStorage.setItem('fishelter-theme', theme);
+            document.querySelectorAll('[data-theme-toggle]').forEach((button) => {
+                const icon = button.querySelector('.theme-icon');
+                if (icon) {
+                    icon.className = theme === 'dark' ? 'fas fa-sun theme-icon' : 'fas fa-moon theme-icon';
+                }
+                button.setAttribute('aria-pressed', String(theme === 'dark'));
+            });
+        }
+
+        const savedTheme = localStorage.getItem('fishelter-theme');
+        const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        applyTheme(savedTheme || systemTheme);
+
+        document.querySelectorAll('[data-theme-toggle]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const nextTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                applyTheme(nextTheme);
+            });
+        });
+
+        // ===== NAVBAR SCROLL =====
+        const navbar = document.getElementById('navbar');
+        window.addEventListener('scroll', () => {
+            navbar.classList.toggle('scrolled', window.scrollY > 20);
+            document.getElementById('scrollTop').classList.toggle('visible', window.scrollY > 300);
+        });
+
+        // ===== MOBILE MENU =====
+        const hamburger = document.getElementById('hamburger');
+        const mobileMenu = document.getElementById('mobileMenu');
+        hamburger.addEventListener('click', () => {
+            mobileMenu.classList.toggle('open');
+        });
+        mobileMenu.querySelectorAll('a').forEach(link => {
+            link.addEventListener('click', () => mobileMenu.classList.remove('open'));
+        });
+
+        // ===== SCROLL TO TOP =====
+        document.getElementById('scrollTop').addEventListener('click', () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
+        // ===== FADE UP OBSERVER =====
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
+        }, { threshold: 0.1 });
+        document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+        // ===== PWA INSTALL =====
+        let deferredPrompt = null;
+        const pwaButtons = document.querySelectorAll('#pwa-btn-nav, #pwa-btn-hero, #pwa-btn-section');
+        const pwaNotAvailable = document.getElementById('pwa-not-available');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            pwaButtons.forEach(btn => {
+                btn.classList.remove('hidden-pwa');
+                btn.addEventListener('click', async () => {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    if (outcome === 'accepted') {
+                        pwaButtons.forEach(b => b.classList.add('hidden-pwa'));
+                    }
+                    deferredPrompt = null;
+                });
+            });
+        });
+
+        window.addEventListener('appinstalled', () => {
+            pwaButtons.forEach(btn => btn.classList.add('hidden-pwa'));
+            deferredPrompt = null;
+        });
+
+        // Se nao suportar PWA, mostrar instrucao manual
+        setTimeout(() => {
+            if (!deferredPrompt && !window.matchMedia('(display-mode: standalone)').matches) {
+                pwaNotAvailable.style.display = 'block';
+            }
+        }, 3000);
+
+        // ===== SERVICE WORKER =====
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
+        }
+    </script>
+</body>
+</html>

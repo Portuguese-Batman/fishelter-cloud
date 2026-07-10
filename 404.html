@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Fishelter Cloud</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-cyan: #06b6d4;
+            --bg: #0f0f0f;
+            --panel: rgba(255,255,255,0.06);
+            --text: #e5e5e5;
+            --muted: #a3a3a3;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            background: radial-gradient(circle at top, #1b1b1b 0%, var(--bg) 60%);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            overflow: hidden;
+        }
+        canvas { position: fixed; inset: 0; z-index: 0; }
+        .card {
+            position: relative; z-index: 1;
+            width: min(92vw, 720px);
+            padding: 2rem;
+            border-radius: 24px;
+            background: var(--panel);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+        .brand {
+            display: inline-flex; align-items: center; gap: 0.7rem;
+            font-weight: 700; font-size: 1.1rem; color: white; margin-bottom: 1rem;
+        }
+        .brand i { color: var(--primary-cyan); }
+        .code {
+            font-size: clamp(5rem, 16vw, 10rem); font-weight: 800; color: var(--primary);
+            margin: 0.2rem 0 0.6rem; animation: pulse 2s ease-in-out infinite;
+        }
+        h1 { margin: 0 0 0.7rem; font-size: clamp(1.35rem, 4vw, 2rem); }
+        p { color: var(--muted); line-height: 1.6; margin: 0 auto 1.4rem; max-width: 560px; }
+        .actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75rem; }
+        .btn {
+            padding: 0.8rem 1.2rem; border-radius: 999px; text-decoration: none; font-weight: 600;
+            color: white; border: none; cursor: pointer;
+        }
+        .btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-cyan)); }
+        .btn-dark { background: rgba(255,255,255,0.08); color: var(--text); }
+        @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+        @media (max-width: 640px) {
+            .card { padding: 1.5rem; }
+            .actions { flex-direction: column; }
+            .btn { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="stars"></canvas>
+    <div class="card">
+        <div class="brand"><i class="fas fa-cloud"></i> Fishelter Cloud</div>
+        <div class="code">404</div>
+        <h1>Esta página não existe</h1>
+        <p>O ficheiro que procuras pode ter sido apagado ou o endereço está errado.</p>
+        <div class="actions">
+            <a href="index.html" class="btn btn-primary">Voltar ao início</a>
+            <a href="dashboard.html" class="btn btn-dark">Ir para o dashboard</a>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('stars');
+        const ctx = canvas.getContext('2d');
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+        const stars = Array.from({ length: 70 }, () => ({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            r: Math.random() * 1.6 + 0.4,
+            a: Math.random() * 0.7 + 0.2
+        }));
+
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+            stars.forEach((star) => {
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255,255,255,${star.a})`;
+                ctx.fill();
+            });
+        }
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            stars.forEach((star) => {
+                star.x = Math.random() * width;
+                star.y = Math.random() * height;
+            });
+            draw();
+        }
+
+        window.addEventListener('resize', resize);
+        draw();
+    </script>
+</body>
+</html>
