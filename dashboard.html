@@ -131,13 +131,61 @@
     </div>
 
     <div id="previewModal" class="modal-overlay hidden">
-        <div class="modal-content" style="max-width: 800px; width: 95%;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
-                <h3 id="previewTitle">Ficheiro</h3>
+        <div class="modal-content preview-modal-content">
+            <div class="preview-modal-top">
+                <div>
+                    <p class="preview-kicker">Vista detalhada</p>
+                    <h3 id="previewTitle">Ficheiro</h3>
+                </div>
                 <button class="btn btn-text" onclick="closeModal('previewModal')"><i class="fas fa-times"></i></button>
             </div>
-            <div id="previewBody" style="background: #f1f5f9; min-height: 300px; display: flex; align-items: center; justify-content: center; border-radius: 8px; margin-bottom: 1rem;">
+
+            <div class="preview-layout">
+                <div class="preview-stage">
+                    <button class="preview-nav-btn" id="previewPrevBtn" type="button" aria-label="Anterior"><i class="fas fa-chevron-left"></i></button>
+                    <div id="previewBody" class="preview-body"></div>
+                    <button class="preview-nav-btn" id="previewNextBtn" type="button" aria-label="Seguinte"><i class="fas fa-chevron-right"></i></button>
                 </div>
+
+                <aside class="preview-sidebar">
+                    <div class="preview-actions">
+                        <button class="preview-action-btn" id="previewEditBtn" type="button"><i class="fas fa-pen"></i> Editar</button>
+                        <button class="preview-action-btn" id="previewShareBtn" type="button"><i class="fas fa-share-alt"></i> Partilhar</button>
+                        <button class="preview-action-btn" id="previewAssistantBtn" type="button"><i class="fas fa-robot"></i> IA</button>
+                    </div>
+
+                    <div class="preview-meta-card">
+                        <h4>Detalhes</h4>
+                        <label>Nome
+                            <input id="previewNameInput" type="text">
+                        </label>
+                        <label>Descrição
+                            <textarea id="previewDescriptionInput" rows="3"></textarea>
+                        </label>
+                        <label>Álbum
+                            <select id="previewAlbumSelect">
+                                <option value="Geral">Geral</option>
+                                <option value="Memórias">Memórias</option>
+                                <option value="Trabalho">Trabalho</option>
+                                <option value="Viagens">Viagens</option>
+                            </select>
+                        </label>
+                        <div class="preview-switches">
+                            <label><input id="previewStarInput" type="checkbox"> Destacar</label>
+                            <label><input id="previewPrivateInput" type="checkbox"> Privado</label>
+                        </div>
+                    </div>
+
+                    <div class="preview-ai-card">
+                        <div class="preview-ai-header">
+                            <i class="fas fa-robot"></i>
+                            <strong>Assistente IA</strong>
+                        </div>
+                        <p id="previewAiSummary">A IA pode ajudar a organizar, descrever e sugerir ações para esta imagem.</p>
+                        <ul id="previewAiSuggestions"></ul>
+                    </div>
+                </aside>
+            </div>
         </div>
     </div>
 

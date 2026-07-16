@@ -5,6 +5,9 @@ let allFiles = [];
 let activeUploadXhr = null;
 let pendingDeleteFileName = null;
 let deleteCountdownTimer = null;
+let currentVisibleFiles = [];
+let currentPreviewIndex = -1;
+let currentPreviewFile = null;
 
 function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
@@ -156,7 +159,8 @@ async function handleLogout() {
 async function loadFiles() {
     try {
         const res = await fetch('api/files.php');
-        allFiles = await res.json();
+        const fetchedFiles = await res.json();
+        allFiles = (fetchedFiles || []).map(normalizeFile);
         renderFiles(allFiles);
         updateStorageStats(allFiles);
     } catch (err) {
@@ -180,6 +184,39 @@ function isVideoFile(fileName) {
 
 function isPdfFile(fileName) {
     return getFileExtension(fileName) === 'pdf';
+}
+
+function loadFileMetadata() {
+    try {
+        return JSON.parse(localStorage.getItem('fishelter-file-meta') || '{}');
+    } catch (err) {
+        return {};
+    }
+}
+
+const fileMetadataStore = loadFileMetadata();
+
+function normalizeFile(file) {
+    const storedMeta = fileMetadataStore[file.name] || {};
+    return {
+        ...file,
+        title: storedMeta.title || file.name,
+        description: storedMeta.description || '',
+        album: storedMeta.album || 'Geral',
+        starred: Boolean(storedMeta.starred),
+        private: Boolean(storedMeta.private),
+        shared: Boolean(storedMeta.shared),
+        aiSummary: storedMeta.aiSummary || ''
+    };
+}
+
+function persistFileMetadata(fileName, updates) {
+    fileMetadataStore[fileName] = {
+        ...(fileMetadataStore[fileName] || {}),
+        ...updates
+    };
+    localStorage.setItem('fishelter-file-meta', JSON.stringify(fileMetadataStore));
+    return fileMetadataStore[fileName];
 }
 
 function createFileVisual(file) {
@@ -226,17 +263,18 @@ function createFileVisual(file) {
 }
 
 function renderFiles(files) {
+    currentVisibleFiles = Array.isArray(files) ? files : [];
     const grid = document.getElementById('fileGrid');
     const empty = document.getElementById('emptyState');
     grid.innerHTML = '';
 
-    if (files.length === 0) {
+    if (currentVisibleFiles.length === 0) {
         empty.classList.remove('hidden');
         return;
     }
     empty.classList.add('hidden');
 
-    files.forEach((file, index) => {
+    currentVisibleFiles.forEach((file, index) => {
         const card = document.createElement('div');
         card.className = 'file-card';
         card.style.animationDelay = `${index * 60}ms`;
@@ -249,13 +287,21 @@ function renderFiles(files) {
         meta.className = 'card-meta';
 
         const title = document.createElement('h4');
-        title.textContent = file.name;
+        title.textContent = file.title || file.name;
 
         const info = document.createElement('p');
-        info.textContent = `${file.size} • ${file.date}`;
+        const statusText = [file.album || 'Geral', file.shared ? 'Partilhado' : 'Pessoal'].join(' • ');
+        info.textContent = `${statusText} • ${file.size}`;
+
+        const badgeRow = document.createElement('div');
+        badgeRow.className = 'meta-badges';
+        if (file.starred) badgeRow.innerHTML += '<span class="meta-chip"><i class="fas fa-star"></i> Destaque</span>';
+        if (file.private) badgeRow.innerHTML += '<span class="meta-chip"><i class="fas fa-lock"></i> Privado</span>';
+        if (file.shared) badgeRow.innerHTML += '<span class="meta-chip"><i class="fas fa-share-alt"></i> Partilhado</span>';
 
         meta.appendChild(title);
         meta.appendChild(info);
+        if (badgeRow.children.length) meta.appendChild(badgeRow);
 
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn-text file-action-btn delete';
@@ -540,18 +586,89 @@ async function updateStorageStats(files) {
 
 // Utilitários de Modal
 window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
-function openPreview(file) {
-    const modal = document.getElementById('previewModal');
-    document.getElementById('previewTitle').innerText = file.name;
+function renderPreviewBody(file) {
     const body = document.getElementById('previewBody');
-    
-    if(file.type === 'image') {
-        body.innerHTML = `<img src="${file.url}" style="max-height:300px; max-width:100%">`;
+    if (!body) return;
+
+    if (file && isImageFile(file.name)) {
+        body.innerHTML = `<img src="${file.url}" alt="${file.name}">`;
     } else {
-        body.innerHTML = `<i class="fas fa-file-alt" style="font-size:4rem; color:#cbd5e1"></i>`;
+        body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:0.75rem;color:#64748b;font-size:1rem;"><i class="fas fa-file-alt" style="font-size:3.2rem"></i><span>${file.name}</span></div>`;
     }
-    
+}
+
+function renderAiSuggestions(file) {
+    const summary = document.getElementById('previewAiSummary');
+    const suggestionsList = document.getElementById('previewAiSuggestions');
+    if (!summary || !suggestionsList) return;
+
+    const prompts = [
+        { label: 'Descrever automaticamente', action: 'description' },
+        { label: 'Criar álbum de memórias', action: 'album' },
+        { label: 'Sugestão de partilha', action: 'share' }
+    ];
+
+    const aiText = file && file.aiSummary ? file.aiSummary : 'A IA pode ajudar a organizar, descrever e sugerir ações para esta imagem.';
+    summary.textContent = aiText;
+    suggestionsList.innerHTML = prompts.map((item) => `<li><span>${item.label}</span><button type="button" data-action="${item.action}">${item.action === 'description' ? 'Aplicar' : 'Usar'}</button></li>`).join('');
+
+    suggestionsList.querySelectorAll('button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.action === 'description') {
+                const nextDescription = `${file.title || file.name} — imagem com ótimo potencial para o álbum de memórias.`;
+                persistFileMetadata(file.name, { description: nextDescription, aiSummary: 'Descrição criada automaticamente pela IA.' });
+                file.description = nextDescription;
+                file.aiSummary = 'Descrição criada automaticamente pela IA.';
+                document.getElementById('previewDescriptionInput').value = nextDescription;
+                renderAiSuggestions(file);
+                showToast('Descrição sugerida pela IA aplicada', 'info');
+            } else if (btn.dataset.action === 'album') {
+                persistFileMetadata(file.name, { album: 'Memórias', aiSummary: 'Álbum sugerido pela IA: Memórias.' });
+                file.album = 'Memórias';
+                file.aiSummary = 'Álbum sugerido pela IA: Memórias.';
+                document.getElementById('previewAlbumSelect').value = 'Memórias';
+                renderAiSuggestions(file);
+                showToast('Álbum sugerido pela IA aplicado', 'info');
+            } else {
+                persistFileMetadata(file.name, { shared: true, aiSummary: 'Partilha sugerida pela IA.' });
+                file.shared = true;
+                file.aiSummary = 'Partilha sugerida pela IA.';
+                renderAiSuggestions(file);
+                showToast('Partilha ativada para esta imagem', 'info');
+            }
+        });
+    });
+}
+
+function populatePreviewPanel(file) {
+    if (!file) return;
+    document.getElementById('previewTitle').innerText = file.title || file.name;
+    document.getElementById('previewNameInput').value = file.title || file.name;
+    document.getElementById('previewDescriptionInput').value = file.description || '';
+    document.getElementById('previewAlbumSelect').value = file.album || 'Geral';
+    document.getElementById('previewStarInput').checked = Boolean(file.starred);
+    document.getElementById('previewPrivateInput').checked = Boolean(file.private);
+    renderPreviewBody(file);
+    renderAiSuggestions(file);
+}
+
+function showPreviewAt(index) {
+    const stack = currentVisibleFiles.length ? currentVisibleFiles : allFiles;
+    if (!stack.length) return;
+    currentPreviewIndex = (index + stack.length) % stack.length;
+    currentPreviewFile = stack[currentPreviewIndex];
+    populatePreviewPanel(currentPreviewFile);
+    const modal = document.getElementById('previewModal');
     modal.classList.remove('hidden');
+}
+
+function openPreview(file) {
+    const stack = currentVisibleFiles.length ? currentVisibleFiles : allFiles;
+    const index = stack.findIndex((item) => item.name === file.name);
+    currentPreviewFile = stack[index] || file;
+    currentPreviewIndex = index >= 0 ? index : 0;
+    populatePreviewPanel(currentPreviewFile);
+    document.getElementById('previewModal').classList.remove('hidden');
 }
 
 // --- INICIALIZAÇÃO ---
@@ -625,6 +742,65 @@ document.addEventListener('DOMContentLoaded', () => {
             const term = e.target.value.toLowerCase();
             const filtered = allFiles.filter(f => f.name.toLowerCase().includes(term));
             renderFiles(filtered);
+        });
+
+        document.getElementById('previewPrevBtn')?.addEventListener('click', () => showPreviewAt(currentPreviewIndex - 1));
+        document.getElementById('previewNextBtn')?.addEventListener('click', () => showPreviewAt(currentPreviewIndex + 1));
+        document.getElementById('previewEditBtn')?.addEventListener('click', () => {
+            document.getElementById('previewNameInput')?.focus();
+            showToast('Edição ativada para esta imagem', 'info');
+        });
+        document.getElementById('previewShareBtn')?.addEventListener('click', () => {
+            if (!currentPreviewFile) return;
+            const shared = !currentPreviewFile.shared;
+            persistFileMetadata(currentPreviewFile.name, { shared });
+            currentPreviewFile.shared = shared;
+            renderFiles(currentVisibleFiles.length ? currentVisibleFiles : allFiles);
+            populatePreviewPanel(currentPreviewFile);
+            showToast(shared ? 'Imagem partilhada' : 'Partilha removida', 'info');
+        });
+        document.getElementById('previewAssistantBtn')?.addEventListener('click', () => {
+            if (currentPreviewFile) renderAiSuggestions(currentPreviewFile);
+        });
+
+        ['previewNameInput', 'previewDescriptionInput', 'previewAlbumSelect', 'previewStarInput', 'previewPrivateInput'].forEach((fieldId) => {
+            const element = document.getElementById(fieldId);
+            if (!element) return;
+            element.addEventListener('input', () => {
+                if (!currentPreviewFile) return;
+                const updates = {};
+                if (fieldId === 'previewNameInput') {
+                    updates.title = element.value;
+                    currentPreviewFile.title = element.value;
+                    document.getElementById('previewTitle').textContent = element.value;
+                } else if (fieldId === 'previewDescriptionInput') {
+                    updates.description = element.value;
+                    currentPreviewFile.description = element.value;
+                } else if (fieldId === 'previewAlbumSelect') {
+                    updates.album = element.value;
+                    currentPreviewFile.album = element.value;
+                } else if (fieldId === 'previewStarInput') {
+                    updates.starred = element.checked;
+                    currentPreviewFile.starred = element.checked;
+                } else if (fieldId === 'previewPrivateInput') {
+                    updates.private = element.checked;
+                    currentPreviewFile.private = element.checked;
+                }
+                persistFileMetadata(currentPreviewFile.name, updates);
+                renderFiles(currentVisibleFiles.length ? currentVisibleFiles : allFiles);
+            });
+        });
+
+        document.addEventListener('keydown', (event) => {
+            const modal = document.getElementById('previewModal');
+            if (modal.classList.contains('hidden')) return;
+            if (event.key === 'ArrowRight') {
+                event.preventDefault();
+                showPreviewAt(currentPreviewIndex + 1);
+            } else if (event.key === 'ArrowLeft') {
+                event.preventDefault();
+                showPreviewAt(currentPreviewIndex - 1);
+            }
         });
     }
 });
