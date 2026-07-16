@@ -46,6 +46,7 @@
 
 body { background-color: var(--body-bg); color: var(--text-main); min-height: 100vh; transition: background-color 200ms ease, color 200ms ease; }
 body, body * { transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease; }
+body.dash-body { overflow-x: hidden; }
 
 /* Utilitários */
 .hidden { display: none !important; }
@@ -128,11 +129,11 @@ body, body * { transition: background-color 200ms ease, color 200ms ease, border
 .settings-preview p, .ai-preview-card p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.6; }
 
 /* --- DASHBOARD LAYOUT --- */
-.dash-body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.dash-body { display: flex; flex-direction: column; min-height: 100vh; overflow: hidden; }
 
 .dash-header {
-    height: var(--header-height); background: var(--header-bg); border-bottom: 1px solid var(--border-color);
-    display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; z-index: 10;
+    min-height: var(--header-height); background: var(--header-bg); border-bottom: 1px solid var(--border-color);
+    display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; z-index: 10; gap: 1rem;
 }
 .logo-area { display: flex; align-items: center; gap: 10px; font-weight: bold; font-size: 1.2rem; color: var(--text-main); }
 .header-actions { display: flex; gap: 15px; align-items: center; }
@@ -351,7 +352,8 @@ body, body * { transition: background-color 200ms ease, color 200ms ease, border
 .toast-close { background: transparent; border: none; color: var(--text-muted); cursor: pointer; }
 
 @media (max-width: 768px) {
-    .dash-header { padding: 0 1rem; }
+    .dash-header { padding: 0 1rem; flex-wrap: wrap; }
+    .logo-area { flex: 1; min-width: 0; }
     .mobile-hamburger, .mobile-search-toggle { display: inline-flex; align-items: center; justify-content: center; }
     .mobile-hamburger {
         width: 40px; height: 40px; border: none; border-radius: 50%; background: var(--surface-muted); color: var(--text-main); cursor: pointer;
@@ -361,7 +363,7 @@ body, body * { transition: background-color 200ms ease, color 200ms ease, border
     }
     .header-actions .theme-toggle { display: none; }
     .sidebar {
-        position: fixed; left: -100%; top: 0; height: 100%; z-index: 30; transition: left 0.3s ease; box-shadow: 0 0 24px rgba(0,0,0,0.2);
+        position: fixed; left: -100%; top: 0; height: 100%; width: min(88vw, var(--sidebar-width)); z-index: 30; transition: left 0.3s ease; box-shadow: 0 0 24px rgba(0,0,0,0.2);
     }
     .sidebar.open { left: 0; }
     .sidebar-overlay {
@@ -374,6 +376,10 @@ body, body * { transition: background-color 200ms ease, color 200ms ease, border
     .mobile-search-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
     .grid-files { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
     .modal-content { width: 95%; padding: 1.25rem; }
+    .preview-layout { grid-template-columns: 1fr; }
+    .preview-stage { display: flex; flex-direction: column; gap: 0.6rem; }
+    .preview-nav-btn { align-self: flex-end; }
+    .preview-body { min-height: 280px; }
 }
 
 @media (max-width: 560px) {
@@ -381,6 +387,13 @@ body, body * { transition: background-color 200ms ease, color 200ms ease, border
     .logo-area { font-size: 1rem; }
     .dash-header { gap: 0.75rem; }
     .header-actions .btn-primary, .header-actions #logoutBtn { display: none; }
+    .header-actions { gap: 0.5rem; }
+    .file-card { padding: 0.8rem; }
+    .file-action-btn { width: 32px; height: 32px; }
+    .preview-modal-content { padding: 0.9rem; }
+    .preview-sidebar { gap: 0.6rem; }
+    .preview-actions { gap: 0.45rem; }
+    .preview-action-btn { padding: 0.55rem 0.7rem; font-size: 0.9rem; }
 }
 .settings-btn { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--border-color); background: var(--surface-muted); color: var(--text-main); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .settings-modal-overlay {

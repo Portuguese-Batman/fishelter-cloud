@@ -233,6 +233,7 @@
         .hero-orb-1 { width: 500px; height: 500px; background: #a78bfa; top: -100px; right: -100px; }
         .hero-orb-2 { width: 350px; height: 350px; background: #06b6d4; bottom: -80px; left: -80px; animation-delay: -4s; }
         @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-30px)} }
+        @keyframes cloudDrift { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-10px) scale(1.02); } }
 
         .hero-content {
             position: relative; z-index: 1;
@@ -247,8 +248,21 @@
             padding: 0.4rem 1rem;
             border-radius: 50px;
             font-size: 0.85rem; font-weight: 600;
-            margin-bottom: 1.5rem;
+            margin-bottom: 1.2rem;
         }
+        .hero-cloud {
+            position: relative; display: inline-flex; align-items: center; justify-content: center;
+            width: 76px; height: 76px; border-radius: 24px; margin-bottom: 1.15rem;
+            background: rgba(255,255,255,0.16); color: white; font-size: 1.9rem;
+            border: 1px solid rgba(255,255,255,0.24); backdrop-filter: blur(14px);
+            box-shadow: 0 18px 40px rgba(15,23,42,0.16); animation: cloudDrift 5.2s ease-in-out infinite;
+        }
+        .hero-cloud::before,
+        .hero-cloud::after {
+            content: ''; position: absolute; border-radius: 50%; background: rgba(255,255,255,0.23); filter: blur(6px);
+        }
+        .hero-cloud::before { width: 18px; height: 18px; bottom: 8px; left: 10px; }
+        .hero-cloud::after { width: 26px; height: 26px; bottom: 10px; right: 10px; }
         .hero-title {
             font-size: clamp(2.2rem, 5vw, 3.8rem);
             font-weight: 800;
@@ -620,12 +634,23 @@
             .hamburger { display: flex; }
             .pwa-card { flex-direction: column; text-align: center; padding: 2rem; }
             .pwa-badges { justify-content: center; }
-            .hero-stats { gap: 2rem; }
+            .hero { padding: 100px 5% 60px; }
+            .hero-content { max-width: 100%; text-align: center; display: flex; flex-direction: column; align-items: center; }
+            .hero-title { font-size: clamp(2rem, 8vw, 2.8rem); }
+            .hero-subtitle { font-size: 1rem; }
+            .hero-actions { justify-content: center; }
+            .preview-grid-layout { grid-template-columns: 1fr; }
+            .preview-copy { text-align: center; }
+            .preview-points { justify-items: center; }
+            .preview-body { grid-template-columns: 1fr; }
+            .preview-sidebar { flex-direction: row; justify-content: center; }
         }
         @media (max-width: 480px) {
-            .hero-actions { flex-direction: column; }
-            .hero-actions .btn { justify-content: center; }
+            .hero-actions { flex-direction: column; width: 100%; }
+            .hero-actions .btn { justify-content: center; width: 100%; }
             .hero-stats { flex-wrap: wrap; gap: 1.5rem; }
+            .preview-grid-cards { grid-template-columns: 1fr; }
+            .preview-shell { padding: 0.9rem; }
         }
 
         /* ===== ANIMATIONS ===== */
@@ -700,6 +725,9 @@
         <div class="hero-content">
             <div class="hero-badge">
                 <i class="fas fa-cloud"></i> Armazenamento na Nuvem
+            </div>
+            <div class="hero-cloud" aria-hidden="true">
+                <i class="fas fa-cloud"></i>
             </div>
             <h1 class="hero-title">
                 A sua nuvem<br>pessoal,<br><span>sempre consigo</span>
@@ -978,7 +1006,8 @@
         const hamburger = document.getElementById('hamburger');
         const mobileMenu = document.getElementById('mobileMenu');
         hamburger.addEventListener('click', () => {
-            mobileMenu.classList.toggle('open');
+            const isOpen = mobileMenu.classList.toggle('open');
+            hamburger.setAttribute('aria-expanded', String(isOpen));
         });
         mobileMenu.querySelectorAll('a').forEach(link => {
             link.addEventListener('click', () => mobileMenu.classList.remove('open'));

@@ -162,6 +162,14 @@ async function loadFiles() {
         const fetchedFiles = await res.json();
         allFiles = (fetchedFiles || []).map(normalizeFile);
         renderFiles(allFiles);
+        const shareParam = new URLSearchParams(window.location.search).get('share');
+        if (shareParam) {
+            const sharedFile = allFiles.find((file) => file.name === shareParam);
+            if (sharedFile) {
+                openPreview(sharedFile);
+                showToast('Imagem aberta a partir do link de partilha', 'info');
+            }
+        }
         updateStorageStats(allFiles);
     } catch (err) {
         console.error('Erro ao carregar ficheiros:', err);
@@ -477,6 +485,42 @@ function showToast(message, type = 'info') {
     setTimeout(closeToast, 4000);
 }
 
+function getShareUrl(file) {
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    return `${baseUrl}?share=${encodeURIComponent(file.name)}`;
+}
+
+async function shareFile(file) {
+    if (!file) return;
+
+    const shareUrl = getShareUrl(file);
+
+    try {
+        if (navigator.share) {
+            await navigator.share({
+                title: file.title || file.name,
+                text: `Veja ${file.title || file.name} no Fishelter Cloud`,
+                url: shareUrl
+            });
+        } else if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(shareUrl);
+            showToast('Link copiado para a área de transferência', 'info');
+        } else {
+            window.prompt('Copie este link para partilhar', shareUrl);
+        }
+
+        persistFileMetadata(file.name, { shared: true });
+        file.shared = true;
+        renderFiles(currentVisibleFiles.length ? currentVisibleFiles : allFiles);
+        populatePreviewPanel(file);
+        showToast('Imagem partilhada com sucesso', 'sucesso');
+    } catch (err) {
+        if (err && err.name !== 'AbortError') {
+            showToast('Não foi possível partilhar esta imagem', 'erro');
+        }
+    }
+}
+
 function openDeleteConfirm(fileName) {
     pendingDeleteFileName = fileName;
     document.getElementById('deleteFileName').textContent = fileName;
@@ -752,12 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         document.getElementById('previewShareBtn')?.addEventListener('click', () => {
             if (!currentPreviewFile) return;
-            const shared = !currentPreviewFile.shared;
-            persistFileMetadata(currentPreviewFile.name, { shared });
-            currentPreviewFile.shared = shared;
-            renderFiles(currentVisibleFiles.length ? currentVisibleFiles : allFiles);
-            populatePreviewPanel(currentPreviewFile);
-            showToast(shared ? 'Imagem partilhada' : 'Partilha removida', 'info');
+            shareFile(currentPreviewFile);
         });
         document.getElementById('previewAssistantBtn')?.addEventListener('click', () => {
             if (currentPreviewFile) renderAiSuggestions(currentPreviewFile);
