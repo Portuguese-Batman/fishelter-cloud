@@ -9,6 +9,9 @@ let currentVisibleFiles = [];
 let currentPreviewIndex = -1;
 let currentPreviewFile = null;
 
+// Gemini/Assistente IA
+const GEMINI_API_KEY = 'AQ.Ab8RN6JEAlZ0QNzF2RgHs2acJP3B9FIm8Tj2OaGK5XBa8jqxsA';
+
 function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
     document.documentElement.style.colorScheme = theme;
@@ -95,16 +98,15 @@ function initSettings() {
 // --- FUNÇÕES DE AUTENTICAÇÃO ---
 
 async function checkAuth() {
-    // Verificar sessão no PHP
     const res = await fetch('api/auth.php?action=check');
     const data = await res.json();
-    
+
     if (data.isLoggedIn) {
         if (window.location.pathname.includes('login.html')) {
             window.location.href = 'dashboard.html';
         } else {
             document.getElementById('userDisplay').innerText = `Olá, ${data.user}`;
-            loadFiles(); // Carregar ficheiros se estiver no dashboard
+            loadFiles();
         }
     } else {
         if (window.location.pathname.includes('dashboard.html')) {
@@ -125,7 +127,7 @@ async function handleLogin(e) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: user, password: pass })
         });
-        
+
         const data = await res.json();
 
         if (data.success) {
@@ -162,6 +164,7 @@ async function loadFiles() {
         const fetchedFiles = await res.json();
         allFiles = (fetchedFiles || []).map(normalizeFile);
         renderFiles(allFiles);
+
         const shareParam = new URLSearchParams(window.location.search).get('share');
         if (shareParam) {
             const sharedFile = allFiles.find((file) => file.name === shareParam);
@@ -170,6 +173,7 @@ async function loadFiles() {
                 showToast('Imagem aberta a partir do link de partilha', 'info');
             }
         }
+
         updateStorageStats(allFiles);
     } catch (err) {
         console.error('Erro ao carregar ficheiros:', err);
@@ -345,7 +349,6 @@ function handleUpload(files) {
         formData.append('file', file);
     }
 
-    // Feedback visual no botão de upload
     const btn = document.getElementById('openUploadBtn');
     const originalText = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> A enviar...';
@@ -586,7 +589,6 @@ async function confirmDeleteFile() {
 
 // Filtros na Sidebar
 window.filterFiles = (type, btn) => {
-    // Atualizar classe active
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
@@ -630,6 +632,7 @@ async function updateStorageStats(files) {
 
 // Utilitários de Modal
 window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
+
 function renderPreviewBody(file) {
     const body = document.getElementById('previewBody');
     if (!body) return;
@@ -702,8 +705,7 @@ function showPreviewAt(index) {
     currentPreviewIndex = (index + stack.length) % stack.length;
     currentPreviewFile = stack[currentPreviewIndex];
     populatePreviewPanel(currentPreviewFile);
-    const modal = document.getElementById('previewModal');
-    modal.classList.remove('hidden');
+    document.getElementById('previewModal').classList.remove('hidden');
 }
 
 function openPreview(file) {
@@ -715,131 +717,304 @@ function openPreview(file) {
     document.getElementById('previewModal').classList.remove('hidden');
 }
 
+// -------------------------
+// Assistente de Voz (SpeechRecognition + Gemini + SpeechSynthesis)
+// -------------------------
+
+function getSpeechRecognitionInstance() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    return SR ? new SR() : null;
+}
+
+function speakPtPT(text) {
+    try {
+        const synth = window.speechSynthesis;
+        if (!synth) return;
+
+        synth.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'pt-PT';
+        utterance.rate = 1;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        synth.speak(utterance);
+    } catch (err) {
+        console.error('Erro na síntese de voz:', err);
+    }
+}
+
+function extractCreateFolderTag(text) {
+    if (typeof text !== 'string') return null;
+    const match = text.match(/\[CRIAR_PASTA:\s*([^\]]+)\s*\]/i);
+    return match ? match[1].trim() : null;
+}
+
+async function callGeminiAssistant(userText) {
+    const systemInstructions = [
+        'Tu és o assistente do Fishelter Cloud (PAP) desenvolvido pelo Afonso para a disciplina PAP.',
+        'Responde em português de Portugal.',
+        'Quando o utilizador pedir para criar uma pasta ou álbum (ex: "criar pasta de fotos"),',
+        'deves responder por voz e no final do texto incluir exatamente o padrão oculto:',
+        '[CRIAR_PASTA: Nome da Pasta]',
+        'onde Nome da Pasta é o nome que deves escolher/normalizar a partir do pedido do utilizador (sem inventar conteúdo).',
+        'Não incluas qualquer outra variação do padrão. Mantém o marcador no final da resposta.'
+    ].join('\n');
+
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + encodeURIComponent(GEMINI_API_KEY);
+
+    const payload = {
+        systemInstruction: { parts: [{ text: systemInstructions }] },
+        contents: [{ role: 'user', parts: [{ text: userText }] }],
+        generationConfig: { temperature: 0.4, maxOutputTokens: 300 }
+    };
+
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error('Erro Gemini: ' + res.status + ' ' + t);
+    }
+
+    const data = await res.json();
+    return data?.candidates?.[0]?.content?.parts?.map(p => p?.text).filter(Boolean).join('') || '';
+}
+
+async function handleAssistantCommandFromVoice(transcript) {
+    const status = document.getElementById('status-assistente');
+    const btn = document.getElementById('btn-assistente');
+
+    if (status) status.textContent = 'A pensar...';
+    btn?.setAttribute('disabled', 'true');
+
+    try {
+        const assistantText = await callGeminiAssistant(transcript);
+
+        if (status) status.textContent = assistantText ? 'Resposta pronta' : 'Sem resposta';
+
+        // Detectar marcador e criar pasta
+        const createName = extractCreateFolderTag(assistantText);
+        if (createName) {
+            await fetch('api/criar_pasta.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: 'nome_pasta=' + encodeURIComponent(createName)
+            }).catch((err) => console.error('Erro ao criar pasta:', err));
+        }
+
+        // Falar sem o marcador
+        const spokenText = assistantText.replace(/\[CRIAR_PASTA:\s*[^\]]+\s*\]/i, '').trim();
+        if (spokenText) speakPtPT(spokenText);
+        else speakPtPT('Desculpa, não percebi bem. Podes repetir?');
+
+        if (status) status.textContent = 'Pronto para nova instrução.';
+    } catch (err) {
+        console.error(err);
+        if (status) status.textContent = 'Erro no assistente de voz.';
+        speakPtPT('Desculpa, aconteceu um erro ao contactar a IA.');
+    } finally {
+        btn?.removeAttribute('disabled');
+    }
+}
+
+function startVoiceRecognition() {
+    const btn = document.getElementById('btn-assistente');
+    const status = document.getElementById('status-assistente');
+
+    const SRInstance = getSpeechRecognitionInstance();
+    if (!SRInstance) {
+        if (status) status.textContent = 'Reconhecimento de voz não suportado neste navegador.';
+        speakPtPT('O reconhecimento de voz não é suportado neste navegador.');
+        return;
+    }
+
+    if (btn) btn.setAttribute('disabled', 'true');
+    if (status) status.textContent = 'A ouvir...';
+
+    SRInstance.lang = 'pt-PT';
+    SRInstance.interimResults = false;
+    SRInstance.maxAlternatives = 1;
+
+    SRInstance.onresult = async (event) => {
+        try {
+            const transcript = event.results?.[0]?.[0]?.transcript || '';
+            if (!transcript.trim()) {
+                if (status) status.textContent = 'Não percebi. Podes repetir?';
+                speakPtPT('Desculpa, não percebi bem. Podes repetir?');
+                return;
+            }
+
+            if (status) status.textContent = 'Compreendi. A pensar...';
+            await handleAssistantCommandFromVoice(transcript);
+        } catch (err) {
+            console.error(err);
+            if (status) status.textContent = 'Erro no reconhecimento de voz.';
+            speakPtPT('Desculpa, aconteceu um erro no reconhecimento de voz.');
+        } finally {
+            btn?.removeAttribute('disabled');
+        }
+    };
+
+    SRInstance.onerror = (event) => {
+        console.error('SpeechRecognition error:', event);
+        const msg = event?.error === 'not-allowed'
+            ? 'Permissão negada para microfone.'
+            : 'Não foi possível reconhecer a voz.';
+        if (status) status.textContent = msg;
+        speakPtPT('Não consegui reconhecer a tua voz.');
+        btn?.removeAttribute('disabled');
+    };
+
+    SRInstance.onend = () => {
+        btn?.removeAttribute('disabled');
+    };
+
+    try {
+        SRInstance.start();
+    } catch (e) {
+        if (status) status.textContent = 'Já existe uma escuta em curso...';
+        btn?.removeAttribute('disabled');
+    }
+}
+
 // --- INICIALIZAÇÃO ---
+
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
 
     const loginForm = document.getElementById('loginForm');
-    
+
     if (loginForm) {
         loginForm.addEventListener('submit', handleLogin);
         checkAuth();
-    } else {
-        // Estamos no Dashboard
-        checkAuth(); // Verifica se tem sessão, senão chuta para login
-        initSettings();
-        
-        document.getElementById('logoutBtn').addEventListener('click', handleLogout);
-
-        const mobileHamburger = document.getElementById('mobileHamburger');
-        const sidebar = document.getElementById('sidebar');
-        const sidebarOverlay = document.getElementById('sidebarOverlay');
-        const mobileSearchToggle = document.getElementById('mobileSearchToggle');
-        const searchBar = document.querySelector('.search-bar');
-
-        const toggleSidebar = () => {
-            sidebar.classList.toggle('open');
-            sidebarOverlay.classList.toggle('open');
-        };
-
-        mobileHamburger?.addEventListener('click', toggleSidebar);
-        sidebarOverlay?.addEventListener('click', toggleSidebar);
-        document.querySelectorAll('.nav-item').forEach((item) => item.addEventListener('click', () => {
-            if (window.innerWidth <= 768) {
-                toggleSidebar();
-            }
-        }));
-
-        mobileSearchToggle?.addEventListener('click', () => {
-            searchBar?.classList.toggle('mobile-open');
-        });
-
-        document.addEventListener('click', (e) => {
-            if (window.innerWidth > 768) return;
-            if (!searchBar?.contains(e.target) && !mobileSearchToggle?.contains(e.target)) {
-                searchBar?.classList.remove('mobile-open');
-            }
-        });
-        
-        // Upload
-        const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('fileInput');
-        
-        document.getElementById('openUploadBtn').addEventListener('click', () => {
-            document.getElementById('uploadModal').classList.remove('hidden');
-        });
-        
-        dropZone.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', (e) => handleUpload(e.target.files));
-        
-        // Drag & Drop
-        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.background = '#eef2ff'; });
-        dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); dropZone.style.background = 'transparent'; });
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.style.background = 'transparent';
-            handleUpload(e.dataTransfer.files);
-        });
-        
-        // Pesquisa
-        document.getElementById('searchInput').addEventListener('input', (e) => {
-            const term = e.target.value.toLowerCase();
-            const filtered = allFiles.filter(f => f.name.toLowerCase().includes(term));
-            renderFiles(filtered);
-        });
-
-        document.getElementById('previewPrevBtn')?.addEventListener('click', () => showPreviewAt(currentPreviewIndex - 1));
-        document.getElementById('previewNextBtn')?.addEventListener('click', () => showPreviewAt(currentPreviewIndex + 1));
-        document.getElementById('previewEditBtn')?.addEventListener('click', () => {
-            document.getElementById('previewNameInput')?.focus();
-            showToast('Edição ativada para esta imagem', 'info');
-        });
-        document.getElementById('previewShareBtn')?.addEventListener('click', () => {
-            if (!currentPreviewFile) return;
-            shareFile(currentPreviewFile);
-        });
-        document.getElementById('previewAssistantBtn')?.addEventListener('click', () => {
-            if (currentPreviewFile) renderAiSuggestions(currentPreviewFile);
-        });
-
-        ['previewNameInput', 'previewDescriptionInput', 'previewAlbumSelect', 'previewStarInput', 'previewPrivateInput'].forEach((fieldId) => {
-            const element = document.getElementById(fieldId);
-            if (!element) return;
-            element.addEventListener('input', () => {
-                if (!currentPreviewFile) return;
-                const updates = {};
-                if (fieldId === 'previewNameInput') {
-                    updates.title = element.value;
-                    currentPreviewFile.title = element.value;
-                    document.getElementById('previewTitle').textContent = element.value;
-                } else if (fieldId === 'previewDescriptionInput') {
-                    updates.description = element.value;
-                    currentPreviewFile.description = element.value;
-                } else if (fieldId === 'previewAlbumSelect') {
-                    updates.album = element.value;
-                    currentPreviewFile.album = element.value;
-                } else if (fieldId === 'previewStarInput') {
-                    updates.starred = element.checked;
-                    currentPreviewFile.starred = element.checked;
-                } else if (fieldId === 'previewPrivateInput') {
-                    updates.private = element.checked;
-                    currentPreviewFile.private = element.checked;
-                }
-                persistFileMetadata(currentPreviewFile.name, updates);
-                renderFiles(currentVisibleFiles.length ? currentVisibleFiles : allFiles);
-            });
-        });
-
-        document.addEventListener('keydown', (event) => {
-            const modal = document.getElementById('previewModal');
-            if (modal.classList.contains('hidden')) return;
-            if (event.key === 'ArrowRight') {
-                event.preventDefault();
-                showPreviewAt(currentPreviewIndex + 1);
-            } else if (event.key === 'ArrowLeft') {
-                event.preventDefault();
-                showPreviewAt(currentPreviewIndex - 1);
-            }
-        });
+        return;
     }
+
+    // Estamos no Dashboard
+    checkAuth();
+    initSettings();
+
+    document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+
+    const mobileHamburger = document.getElementById('mobileHamburger');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    const mobileSearchToggle = document.getElementById('mobileSearchToggle');
+    const searchBar = document.querySelector('.search-bar');
+
+    const toggleSidebar = () => {
+        sidebar.classList.toggle('open');
+        sidebarOverlay.classList.toggle('open');
+    };
+
+    mobileHamburger?.addEventListener('click', toggleSidebar);
+    sidebarOverlay?.addEventListener('click', toggleSidebar);
+    document.querySelectorAll('.nav-item').forEach((item) => item.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+            toggleSidebar();
+        }
+    }));
+
+    mobileSearchToggle?.addEventListener('click', () => {
+        searchBar?.classList.toggle('mobile-open');
+    });
+
+    document.addEventListener('click', (e) => {
+        if (window.innerWidth > 768) return;
+        if (!searchBar?.contains(e.target) && !mobileSearchToggle?.contains(e.target)) {
+            searchBar?.classList.remove('mobile-open');
+        }
+    });
+
+    // Upload
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+
+    document.getElementById('openUploadBtn').addEventListener('click', () => {
+        document.getElementById('uploadModal').classList.remove('hidden');
+    });
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => handleUpload(e.target.files));
+
+    // Drag & Drop
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.background = '#eef2ff'; });
+    dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); dropZone.style.background = 'transparent'; });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.style.background = 'transparent';
+        handleUpload(e.dataTransfer.files);
+    });
+
+    // Pesquisa
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        const filtered = allFiles.filter(f => f.name.toLowerCase().includes(term));
+        renderFiles(filtered);
+    });
+
+    // Preview
+    document.getElementById('previewPrevBtn')?.addEventListener('click', () => showPreviewAt(currentPreviewIndex - 1));
+    document.getElementById('previewNextBtn')?.addEventListener('click', () => showPreviewAt(currentPreviewIndex + 1));
+    document.getElementById('previewEditBtn')?.addEventListener('click', () => {
+        document.getElementById('previewNameInput')?.focus();
+        showToast('Edição ativada para esta imagem', 'info');
+    });
+    document.getElementById('previewShareBtn')?.addEventListener('click', () => {
+        if (!currentPreviewFile) return;
+        shareFile(currentPreviewFile);
+    });
+    document.getElementById('previewAssistantBtn')?.addEventListener('click', () => {
+        if (currentPreviewFile) renderAiSuggestions(currentPreviewFile);
+    });
+
+    ['previewNameInput', 'previewDescriptionInput', 'previewAlbumSelect', 'previewStarInput', 'previewPrivateInput'].forEach((fieldId) => {
+        const element = document.getElementById(fieldId);
+        if (!element) return;
+        element.addEventListener('input', () => {
+            if (!currentPreviewFile) return;
+            const updates = {};
+
+            if (fieldId === 'previewNameInput') {
+                updates.title = element.value;
+                currentPreviewFile.title = element.value;
+                document.getElementById('previewTitle').textContent = element.value;
+            } else if (fieldId === 'previewDescriptionInput') {
+                updates.description = element.value;
+                currentPreviewFile.description = element.value;
+            } else if (fieldId === 'previewAlbumSelect') {
+                updates.album = element.value;
+                currentPreviewFile.album = element.value;
+            } else if (fieldId === 'previewStarInput') {
+                updates.starred = element.checked;
+                currentPreviewFile.starred = element.checked;
+            } else if (fieldId === 'previewPrivateInput') {
+                updates.private = element.checked;
+                currentPreviewFile.private = element.checked;
+            }
+
+            persistFileMetadata(currentPreviewFile.name, updates);
+            renderFiles(currentVisibleFiles.length ? currentVisibleFiles : allFiles);
+        });
+    });
+
+    document.addEventListener('keydown', (event) => {
+        const modal = document.getElementById('previewModal');
+        if (modal?.classList.contains('hidden')) return;
+
+        if (event.key === 'ArrowRight') {
+            event.preventDefault();
+            showPreviewAt(currentPreviewIndex + 1);
+        } else if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            showPreviewAt(currentPreviewIndex - 1);
+        }
+    });
+
+    // Assistente IA (voz)
+    document.getElementById('btn-assistente')?.addEventListener('click', () => startVoiceRecognition());
 });
+
