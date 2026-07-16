@@ -36,6 +36,9 @@
             <button class="btn btn-text theme-toggle" type="button" data-theme-toggle aria-label="Alternar tema">
                 <i class="fas fa-moon theme-icon"></i>
             </button>
+            <button class="settings-btn" id="openSettingsBtn" type="button" aria-label="Abrir configurações" title="Configurações">
+                <i class="fas fa-sliders-h"></i>
+            </button>
             <span id="userDisplay" style="font-weight: 600; color: var(--primary);"></span>
             <button class="btn btn-primary" id="openUploadBtn">
                 <i class="fas fa-cloud-upload-alt"></i> <span style="display: none; @media(min-width: 600px){display:inline;}">Upload</span>
@@ -148,6 +151,24 @@
             <div class="confirm-actions">
                 <button class="btn btn-text confirm-btn cancel" id="cancelDeleteBtn">Cancelar</button>
                 <button class="btn confirm-btn danger" id="confirmDeleteBtn" disabled>Apagar (2)</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="settingsModal" class="settings-modal-overlay hidden">
+        <div class="settings-modal-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;">
+                <h3>Configurações</h3>
+                <button class="btn btn-text" id="closeSettingsBtn" type="button"><i class="fas fa-times"></i></button>
+            </div>
+            <p>Ajusta a experiência para ficar mais confortável e personalizada.</p>
+            <div class="setting-row">
+                <label for="settingsCompact">Vista compacta</label>
+                <input id="settingsCompact" type="checkbox">
+            </div>
+            <div class="setting-row">
+                <label for="settingsMotion">Transições suaves</label>
+                <input id="settingsMotion" type="checkbox">
             </div>
         </div>
     </div>

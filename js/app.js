@@ -35,6 +35,60 @@ function initTheme() {
     });
 }
 
+function loadSettings() {
+    try {
+        return JSON.parse(localStorage.getItem('fishelter-settings') || '{}');
+    } catch (err) {
+        return {};
+    }
+}
+
+function saveSettings(settings) {
+    localStorage.setItem('fishelter-settings', JSON.stringify(settings));
+}
+
+function applySettings(settings) {
+    const compact = Boolean(settings.compact);
+    const reducedMotion = Boolean(settings.reducedMotion);
+
+    document.body.classList.toggle('compact-view', compact);
+    document.body.classList.toggle('reduced-motion', reducedMotion);
+
+    const compactToggle = document.getElementById('settingsCompact');
+    const motionToggle = document.getElementById('settingsMotion');
+    if (compactToggle) compactToggle.checked = compact;
+    if (motionToggle) motionToggle.checked = reducedMotion;
+}
+
+function initSettings() {
+    const settings = loadSettings();
+    applySettings(settings);
+
+    const openSettingsBtn = document.getElementById('openSettingsBtn');
+    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+    const settingsModal = document.getElementById('settingsModal');
+    const compactToggle = document.getElementById('settingsCompact');
+    const motionToggle = document.getElementById('settingsMotion');
+
+    openSettingsBtn?.addEventListener('click', () => settingsModal?.classList.remove('hidden'));
+    closeSettingsBtn?.addEventListener('click', () => settingsModal?.classList.add('hidden'));
+    settingsModal?.addEventListener('click', (event) => {
+        if (event.target === settingsModal) settingsModal.classList.add('hidden');
+    });
+
+    const persistSettings = () => {
+        const nextSettings = {
+            compact: compactToggle?.checked || false,
+            reducedMotion: motionToggle?.checked || false
+        };
+        saveSettings(nextSettings);
+        applySettings(nextSettings);
+    };
+
+    compactToggle?.addEventListener('change', persistSettings);
+    motionToggle?.addEventListener('change', persistSettings);
+}
+
 // --- FUNÇÕES DE AUTENTICAÇÃO ---
 
 async function checkAuth() {
@@ -72,7 +126,15 @@ async function handleLogin(e) {
         const data = await res.json();
 
         if (data.success) {
-            window.location.href = 'dashboard.html';
+            const wrapper = document.querySelector('.login-wrapper');
+            if (wrapper) {
+                wrapper.classList.add('login-transitioning');
+                setTimeout(() => {
+                    window.location.href = 'dashboard.html';
+                }, 1100);
+            } else {
+                window.location.href = 'dashboard.html';
+            }
         } else {
             errorMsg.style.display = 'block';
             errorMsg.textContent = data.message || 'Erro no login';
@@ -504,6 +566,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         // Estamos no Dashboard
         checkAuth(); // Verifica se tem sessão, senão chuta para login
+        initSettings();
         
         document.getElementById('logoutBtn').addEventListener('click', handleLogout);
 

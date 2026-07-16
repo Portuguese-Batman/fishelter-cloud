@@ -202,6 +202,18 @@
             position: relative;
             overflow: hidden;
         }
+        .hero-canvas-wrap {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+        .hero-canvas-wrap canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
         .hero-bg {
             position: absolute; inset: 0; z-index: 0;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #06b6d4 100%);
@@ -318,6 +330,116 @@
             color: rgba(255,255,255,0.8); font-size: 0.82rem; font-weight: 500;
         }
         .cloud-feat i { font-size: 0.85rem; color: rgba(255,255,255,0.5); width: 16px; text-align: center; }
+
+        .preview-section {
+            padding: 90px 5% 40px;
+        }
+        .preview-shell {
+            max-width: 1220px;
+            margin: 0 auto;
+            border-radius: 36px;
+            padding: 1.2rem;
+            background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(248,250,252,0.8));
+            border: 1px solid var(--border-color);
+            box-shadow: 0 30px 70px rgba(15,23,42,0.1);
+            backdrop-filter: blur(16px);
+        }
+        [data-theme="dark"] .preview-shell {
+            background: linear-gradient(135deg, rgba(15,23,42,0.95), rgba(17,24,39,0.9));
+        }
+        .preview-grid-layout {
+            display: grid;
+            grid-template-columns: 0.9fr 1.1fr;
+            gap: 1.2rem;
+            align-items: center;
+        }
+        .preview-copy h2 {
+            font-size: clamp(1.6rem, 3vw, 2.3rem);
+            margin-bottom: 0.8rem;
+            line-height: 1.2;
+        }
+        .preview-copy p {
+            color: var(--text-muted);
+            line-height: 1.8;
+            margin-bottom: 1rem;
+        }
+        .preview-points {
+            display: grid;
+            gap: 0.7rem;
+        }
+        .preview-point {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            color: var(--text-main);
+            font-weight: 600;
+        }
+        .preview-point i {
+            width: 34px; height: 34px; border-radius: 50%;
+            display: grid; place-items: center; color: white;
+            background: linear-gradient(135deg, var(--primary), var(--accent2));
+            box-shadow: 0 10px 24px rgba(79,70,229,0.24);
+        }
+        .preview-window {
+            border-radius: 28px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            background: var(--surface-alt);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.35);
+        }
+        .preview-topbar {
+            padding: 0.8rem 1rem;
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(255,255,255,0.55);
+            border-bottom: 1px solid var(--border-color);
+        }
+        [data-theme="dark"] .preview-topbar { background: rgba(17,24,39,0.75); }
+        .preview-dots { display: flex; gap: 0.35rem; }
+        .preview-dots span {
+            width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1;
+        }
+        .preview-dots span:first-child { background: #fb7185; }
+        .preview-dots span:nth-child(2) { background: #fbbf24; }
+        .preview-dots span:nth-child(3) { background: #34d399; }
+        .preview-body {
+            display: grid;
+            grid-template-columns: 90px 1fr;
+            min-height: 320px;
+        }
+        .preview-sidebar {
+            background: linear-gradient(180deg, rgba(79,70,229,0.09), rgba(6,182,212,0.05));
+            padding: 0.8rem;
+            display: flex; flex-direction: column; gap: 0.45rem;
+        }
+        .preview-nav-chip {
+            height: 36px; border-radius: 12px; background: rgba(79,70,229,0.12);
+            display: grid; place-items: center; color: var(--primary);
+        }
+        .preview-main {
+            padding: 1rem; display: flex; flex-direction: column; gap: 0.85rem;
+            background: var(--surface);
+        }
+        .preview-toolbar {
+            display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.8rem;
+            border-radius: 14px; background: var(--surface-alt); border: 1px solid var(--border-color);
+        }
+        .preview-badge {
+            display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.7rem;
+            border-radius: 999px; background: rgba(79,70,229,0.12); color: var(--primary); font-size: 0.75rem; font-weight: 800;
+        }
+        .preview-grid-cards {
+            display: grid; gap: 0.75rem; grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .preview-card {
+            border-radius: 16px; min-height: 72px; background: linear-gradient(145deg, rgba(79,70,229,0.11), rgba(6,182,212,0.09));
+            border: 1px solid var(--border-color); padding: 0.8rem;
+            display: flex; flex-direction: column; justify-content: space-between;
+        }
+        .preview-card.large { min-height: 100px; }
+        .preview-card.accent { background: linear-gradient(145deg, rgba(139,92,246,0.14), rgba(244,114,182,0.1)); }
+        .preview-card.soft { background: linear-gradient(145deg, rgba(16,185,129,0.12), rgba(34,211,238,0.1)); }
+        .preview-card span { color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; }
+        .preview-card strong { font-size: 0.9rem; }
 
         /* ===== WAVE DIVIDER ===== */
         .wave-divider { display: block; margin-top: -2px; }
@@ -567,6 +689,9 @@
 
     <!-- HERO -->
     <section class="hero">
+        <div class="hero-canvas-wrap" aria-hidden="true">
+            <canvas id="ambientCanvas"></canvas>
+        </div>
         <div class="hero-bg">
             <div class="hero-orb hero-orb-1"></div>
             <div class="hero-orb hero-orb-2"></div>
@@ -626,6 +751,51 @@
                                 <div class="browser-card large"></div>
                                 <div class="browser-card large accent"></div>
                                 <div class="browser-card large purple"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="preview-section" id="preview">
+        <div class="preview-shell fade-up">
+            <div class="preview-grid-layout">
+                <div class="preview-copy">
+                    <div class="section-label">Preview em tempo real</div>
+                    <h2>Uma visão do dashboard que parece viver.</h2>
+                    <p>O novo Fishelter Cloud transforma o armazenamento em algo fluido, visual e envolvente, com uma galeria que guia o olhar e torna a navegação muito mais natural.</p>
+                    <div class="preview-points">
+                        <div class="preview-point"><i class="fas fa-layer-group"></i> Navegação por galeria e timeline</div>
+                        <div class="preview-point"><i class="fas fa-magic"></i> Preview imersivo por ficheiro</div>
+                        <div class="preview-point"><i class="fas fa-bolt"></i> Controlo rápido com seleção múltipla</div>
+                    </div>
+                </div>
+                <div class="preview-window">
+                    <div class="preview-topbar">
+                        <div class="preview-dots"><span></span><span></span><span></span></div>
+                        <span style="font-size:0.8rem; color:var(--text-muted); font-weight:700;">fishelter.cloud</span>
+                    </div>
+                    <div class="preview-body">
+                        <aside class="preview-sidebar">
+                            <div class="preview-nav-chip"><i class="fas fa-folder"></i></div>
+                            <div class="preview-nav-chip"><i class="fas fa-image"></i></div>
+                            <div class="preview-nav-chip"><i class="fas fa-video"></i></div>
+                            <div class="preview-nav-chip"><i class="fas fa-file-alt"></i></div>
+                        </aside>
+                        <div class="preview-main">
+                            <div class="preview-toolbar">
+                                <strong>Todos os ficheiros</strong>
+                                <span class="preview-badge"><i class="fas fa-cloud-upload-alt"></i> Enviar</span>
+                            </div>
+                            <div class="preview-grid-cards">
+                                <div class="preview-card"><span>Foto</span><strong>Moments</strong></div>
+                                <div class="preview-card accent"><span>Vídeo</span><strong>Trip</strong></div>
+                                <div class="preview-card soft"><span>Doc</span><strong>Notas</strong></div>
+                                <div class="preview-card large"><span>Preview</span><strong>Vista imersiva</strong></div>
+                                <div class="preview-card large accent"><span>Timeline</span><strong>Por data</strong></div>
+                                <div class="preview-card large soft"><span>Seleção</span><strong>Batch</strong></div>
                             </div>
                         </div>
                     </div>
@@ -824,6 +994,65 @@
             entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
         }, { threshold: 0.1 });
         document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+        // ===== AMBIENT PARTICLES =====
+        const canvas = document.getElementById('ambientCanvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            let particles = [];
+
+            const resizeCanvas = () => {
+                const dpr = window.devicePixelRatio || 1;
+                canvas.width = canvas.clientWidth * dpr;
+                canvas.height = canvas.clientHeight * dpr;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                particles = Array.from({ length: 32 }, () => ({
+                    x: Math.random() * canvas.clientWidth,
+                    y: Math.random() * canvas.clientHeight,
+                    r: Math.random() * 2.4 + 0.8,
+                    vx: (Math.random() - 0.5) * 0.35,
+                    vy: (Math.random() - 0.5) * 0.35,
+                    alpha: Math.random() * 0.6 + 0.2
+                }));
+            };
+
+            const draw = () => {
+                const width = canvas.clientWidth;
+                const height = canvas.clientHeight;
+                ctx.clearRect(0, 0, width, height);
+
+                particles.forEach((particle, index) => {
+                    particle.x += particle.vx;
+                    particle.y += particle.vy;
+
+                    if (particle.x < -10 || particle.x > width + 10) particle.vx *= -1;
+                    if (particle.y < -10 || particle.y > height + 10) particle.vy *= -1;
+
+                    ctx.beginPath();
+                    ctx.arc(particle.x, particle.y, particle.r, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255,255,255,${particle.alpha})`;
+                    ctx.fill();
+
+                    for (let next = index + 1; next < particles.length; next += 1) {
+                        const other = particles[next];
+                        const dist = Math.hypot(particle.x - other.x, particle.y - other.y);
+                        if (dist < 110) {
+                            ctx.beginPath();
+                            ctx.moveTo(particle.x, particle.y);
+                            ctx.lineTo(other.x, other.y);
+                            ctx.strokeStyle = `rgba(255,255,255,${(1 - dist / 110) * 0.08})`;
+                            ctx.stroke();
+                        }
+                    }
+                });
+
+                requestAnimationFrame(draw);
+            };
+
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+            draw();
+        }
 
         // ===== PWA INSTALL =====
         let deferredPrompt = null;
