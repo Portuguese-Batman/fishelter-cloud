@@ -542,24 +542,32 @@ function closeDeleteConfirm() {
 
 function startDeleteCountdown() {
     const confirmBtn = document.getElementById('confirmDeleteBtn');
+    if (!confirmBtn) return;
+
+    // Garante estado inicial
     confirmBtn.disabled = true;
     confirmBtn.textContent = 'Apagar (2)';
 
+    // Remove handlers anteriores e usa sempre o mesmo nó
+    confirmBtn.onclick = null;
+
     let remaining = 2;
+
     const tick = () => {
         remaining -= 1;
         if (remaining > 0) {
-            confirmBtn.textContent = `Apagar (${remaining})`;
+            clone.textContent = `Apagar (${remaining})`;
             deleteCountdownTimer = setTimeout(tick, 750);
         } else {
-            confirmBtn.textContent = 'Apagar';
-            confirmBtn.disabled = false;
+            clone.textContent = 'Apagar';
+            clone.disabled = false;
             deleteCountdownTimer = null;
         }
     };
 
     deleteCountdownTimer = setTimeout(tick, 750);
 }
+
 
 async function deleteFile(fileName) {
     openDeleteConfirm(fileName);
