@@ -795,6 +795,7 @@ async function handleAssistantCommandFromVoice(transcript) {
         const assistantText = await callGeminiAssistant(transcript);
         if (status) status.textContent = assistantText ? `IA: ${assistantText}` : 'IA sem resposta';
 
+
         // Detectar marcador e criar pasta
         const createName = extractCreateFolderTag(assistantText);
         if (createName) {
@@ -838,7 +839,10 @@ async function handleAssistantCommandFromVoice(transcript) {
 
     } catch (err) {
         console.error(err);
-        if (status) status.textContent = 'Erro no assistente de voz.';
+        if (status) {
+            const msg = (err && err.message) ? err.message : String(err);
+            status.textContent = 'Erro IA: ' + msg;
+        }
         speakPtPT('Desculpa, aconteceu um erro ao contactar a IA.');
     } finally {
         btn?.removeAttribute('disabled');
