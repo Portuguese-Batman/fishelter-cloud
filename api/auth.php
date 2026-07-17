@@ -37,6 +37,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'check') {
 
 // 3. LOGOUT
 if ($action === 'logout') {
+    // Encerra e limpa a sessão (para evitar que cookies persistam)
+    $_SESSION = [];
+
+    if (session_id() !== '' || isset($_COOKIE[session_name()])) {
+        // Tenta invalidar o cookie da sessão
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(
+                session_name(),
+                '',
+                time() - 42000,
+                $params['path'],
+                $params['domain'],
+                (bool)$params['secure'],
+                (bool)$params['httponly']
+            );
+        }
+    }
+
     session_destroy();
     sendJson(['success' => true]);
 }
