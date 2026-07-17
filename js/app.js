@@ -726,6 +726,7 @@ function getSpeechRecognitionInstance() {
     return SR ? new SR() : null;
 }
 
+
 function speakPtPT(text) {
     try {
         const synth = window.speechSynthesis;
@@ -792,8 +793,7 @@ async function handleAssistantCommandFromVoice(transcript) {
 
     try {
         const assistantText = await callGeminiAssistant(transcript);
-
-        if (status) status.textContent = assistantText ? 'Resposta pronta' : 'Sem resposta';
+        if (status) status.textContent = assistantText ? `IA: ${assistantText}` : 'IA sem resposta';
 
         // Detectar marcador e criar pasta
         const createName = extractCreateFolderTag(assistantText);
@@ -805,12 +805,37 @@ async function handleAssistantCommandFromVoice(transcript) {
             }).catch((err) => console.error('Erro ao criar pasta:', err));
         }
 
-        // Falar sem o marcador
-        const spokenText = assistantText.replace(/\[CRIAR_PASTA:\s*[^\]]+\s*\]/i, '').trim();
+        // Eliminar / Partilhar via marcadores no fim (formatos ocultos)
+        const deleteFileTag = (() => {
+            const m = assistantText.match(/\[APAGAR_FICHEIRO:\s*([^\]]+)\s*\]/i);
+            return m ? m[1].trim() : null;
+        })();
+
+        const shareFileTag = (() => {
+            const m = assistantText.match(/\[PARTILHAR_FICHEIRO:\s*([^\]]+)\s*\]/i);
+            return m ? m[1].trim() : null;
+        })();
+
+        if (deleteFileTag) {
+            await deleteFile(deleteFileTag);
+        }
+
+        if (shareFileTag) {
+            // procura no que carregámos; tenta por nome
+            const target = allFiles.find(f => f.name === shareFileTag) || allFiles.find(f => (f.title || '').toLowerCase() === shareFileTag.toLowerCase());
+            if (target) await shareFile(target);
+        }
+
+        // Falar sem marcadores
+        const spokenText = assistantText
+            .replace(/\[CRIAR_PASTA:\s*[^\]]+\s*\]/i, '')
+            .replace(/\[APAGAR_FICHEIRO:\s*[^\]]+\s*\]/i, '')
+            .replace(/\[PARTILHAR_FICHEIRO:\s*[^\]]+\s*\]/i, '')
+            .trim();
+
         if (spokenText) speakPtPT(spokenText);
         else speakPtPT('Desculpa, não percebi bem. Podes repetir?');
 
-        if (status) status.textContent = 'Pronto para nova instrução.';
     } catch (err) {
         console.error(err);
         if (status) status.textContent = 'Erro no assistente de voz.';
@@ -823,6 +848,8 @@ async function handleAssistantCommandFromVoice(transcript) {
 function startVoiceRecognition() {
     const btn = document.getElementById('btn-assistente');
     const status = document.getElementById('status-assistente');
+    if (status) status.textContent = 'A ouvir...';
+
 
     const SRInstance = getSpeechRecognitionInstance();
     if (!SRInstance) {
@@ -841,6 +868,10 @@ function startVoiceRecognition() {
     SRInstance.onresult = async (event) => {
         try {
             const transcript = event.results?.[0]?.[0]?.transcript || '';
+            if (status && transcript && transcript.trim()) {
+                status.textContent = `Ouvi: ${transcript.trim()}`;
+            }
+
             if (!transcript.trim()) {
                 if (status) status.textContent = 'Não percebi. Podes repetir?';
                 speakPtPT('Desculpa, não percebi bem. Podes repetir?');
