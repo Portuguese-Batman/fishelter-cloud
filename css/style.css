@@ -388,6 +388,18 @@ body.dash-body { overflow-x: hidden; }
     .preview-meta-card, .preview-ai-card { padding: 0.8rem; }
 }
 
+@media (max-width: 768px) {
+    /* Garante que o assistente IA fica sempre acessível no mobile */
+    .ai-assistant-card { margin: 1rem 0 1.1rem; }
+    .btn-assistente-mic {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        z-index: 60;
+    }
+    .main-content { padding-bottom: 92px; }
+}
+
 @media (max-width: 560px) {
     .grid-files { grid-template-columns: 1fr; }
     .logo-area { font-size: 1rem; }
