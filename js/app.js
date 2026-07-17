@@ -571,12 +571,20 @@ async function confirmDeleteFile() {
     const fileName = pendingDeleteFileName;
     closeDeleteConfirm();
 
+    // UI: bloquear botão durante a chamada
+    const confirmBtn = document.getElementById('confirmDeleteBtn');
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+    }
+
     try {
         const res = await fetch(`api/files.php?name=${encodeURIComponent(fileName)}`, { method: 'DELETE' });
-        const data = await res.json();
+        const contentType = res.headers.get('content-type') || '';
+
+        const data = contentType.includes('application/json') ? await res.json() : { success: false, error: await res.text().catch(() => '') };
 
         if (data.success) {
-            loadFiles();
+            await loadFiles();
             showToast('Ficheiro apagado com sucesso', 'sucesso');
         } else {
             showToast(data.error || 'Não foi possível apagar o ficheiro.', 'erro');
@@ -584,8 +592,15 @@ async function confirmDeleteFile() {
     } catch (err) {
         console.error('Erro ao apagar ficheiro:', err);
         showToast('Erro ao apagar o ficheiro.', 'erro');
+    } finally {
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            // repor texto normal
+            confirmBtn.textContent = 'Apagar';
+        }
     }
 }
+
 
 // Filtros na Sidebar
 window.filterFiles = (type, btn) => {
