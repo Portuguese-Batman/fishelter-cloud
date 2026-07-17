@@ -556,14 +556,16 @@ function startDeleteCountdown() {
     const tick = () => {
         remaining -= 1;
         if (remaining > 0) {
-            clone.textContent = `Apagar (${remaining})`;
+            confirmBtn.textContent = `Apagar (${remaining})`;
             deleteCountdownTimer = setTimeout(tick, 750);
         } else {
-            clone.textContent = 'Apagar';
-            clone.disabled = false;
+            confirmBtn.textContent = 'Apagar';
+            confirmBtn.disabled = false;
+            confirmBtn.onclick = confirmDeleteFile;
             deleteCountdownTimer = null;
         }
     };
+
 
     deleteCountdownTimer = setTimeout(tick, 750);
 }
