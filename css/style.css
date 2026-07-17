@@ -172,7 +172,7 @@ body.dash-body { overflow-x: hidden; }
 .storage-info strong { font-size: 0.9rem; color: var(--text-main); }
 .storage-info small { color: var(--text-muted); }
 
-.main-content { flex: 1; padding: 2rem; overflow-y: auto; background: var(--surface); }
+.main-content { flex: 1; padding: 2rem; overflow-y: auto; background: var(--surface); min-height: 0; }
 .grid-files {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.5rem; margin-top: 1.5rem;
 }
