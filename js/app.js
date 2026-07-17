@@ -10,7 +10,7 @@ let currentPreviewIndex = -1;
 let currentPreviewFile = null;
 
 // Gemini/Assistente IA
-const GEMINI_API_KEY = 'AQ.Ab8RN6JEAlZ0QNzF2RgHs2acJP3B9FIm8Tj2OaGK5XBa8jqxsA';
+const GEMINI_API_KEY = 'AQ.Ab8RN6K2GulpRmXbCtgKsj6h57tIfQsbOW_lwzv0L1qI3sPMPQ';
 
 function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
@@ -763,10 +763,20 @@ async function callGeminiAssistant(userText) {
 
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + encodeURIComponent(GEMINI_API_KEY);
 
+    // PAYLOAD CORRIGIDO: Seguindo as especificações estritas da API da Gemini
     const payload = {
-        systemInstruction: { parts: [{ text: systemInstructions }] },
-        contents: [{ role: 'user', parts: [{ text: userText }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 300 }
+        contents: [
+            {
+                role: 'user',
+                parts: [
+                    { text: systemInstructions + "\n\nPergunta do utilizador: " + userText }
+                ]
+            }
+        ],
+        generationConfig: { 
+            temperature: 0.4, 
+            maxOutputTokens: 300 
+        }
     };
 
     const res = await fetch(url, {
@@ -781,7 +791,7 @@ async function callGeminiAssistant(userText) {
     }
 
     const data = await res.json();
-    return data?.candidates?.[0]?.content?.parts?.map(p => p?.text).filter(Boolean).join('') || '';
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 async function handleAssistantCommandFromVoice(transcript) {
