@@ -6,6 +6,10 @@
 - [x] Definição das ferramentas (tools) para function calling
 - [x] Execução das ações PHP (apagar, criar pasta, listar, pesquisar, partilhar, info)
 - [x] Fluxo: mensagem → Gemini → tool call → PHP executa → resposta final
+- [x] Loop de Function Calling com suporte a multiplas ferramentas numa mensagem
+- [x] Confirmacao antes de operacoes destrutivas (apagar, criar pasta)
+- [x] Resposta natural apos execucao de ferramenta (functionResponse)
+- [x] Conversa memorizada em `$_SESSION` (ultimas 20 mensagens)
 
 ## ✅ 2. Atualizar `js/app.js`
 - [x] Remover `GEMINI_API_KEY` exposta no frontend
@@ -31,7 +35,23 @@
 - [x] Ficheiro de configuração seguro (fora do acesso direto)
 - [x] Chave da API Gemini protegida no servidor
 
-## 📋 Pendente - Configuração necessária
+## ✅ 6. Completar `api/ai.php` (v3.0)
+- [x] `toolInfoArmazenamento()` completa e funcional
+- [x] `callGemini()` com API Gemini 2.5 Flash (sem cURL)
+- [x] Function Declarations oficiais para 6 ferramentas
+- [x] `executeTool()` executor de ferramentas
+- [x] `buildContents()` sem `parts:[{}]` ou `text:null`
+- [x] `processWithGemini()` loop de Function Calling
+- [x] Confirmacao antes de apagar/criar pasta
+- [x] Reenvio de resultado ao Gemini para resposta natural
+- [x] Tratamento de erros: timeout, HTTP, JSON, chave invalida
+- [x] Logging completo (pedido, resposta, ferramentas, erros, tempo)
+- [x] Seguranca: basename(), validacao de nomes, RESTRICAO de ../ ..\
+- [x] Reutilizacao de APIs existentes (db.php, config.php)
+- [x] JSON consistente {success, text, history, action, requiresConfirmation}
+- [x] Nao envia parts:[{}] ou text:null
+
+## 📋 Configuração necessária
 - [ ] O utilizador precisa de configurar a chave Gemini em `api/config.php`
   - Aceder a https://aistudio.google.com/app/apikey
   - Criar API Key
