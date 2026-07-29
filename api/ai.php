@@ -13,7 +13,7 @@
  *   - allow_url_fopen = On (no php.ini)
  *
  * @author Afonso (PAP)
- * @version 3.1
+ * @version 3.2
  */
 
 // ================================================================
@@ -64,19 +64,6 @@ header('Content-Type: application/json; charset=utf-8');
 $GLOBALS['_ai_start_time'] = microtime(true);
 
 // ================================================================
-// DEBUG: LOG INICIAL COM INFORMACAO DO SISTEMA
-// ================================================================
-function debugLog($label, $data) {
-    $logDir = dirname(AI_LOG_FILE);
-    if (!is_dir($logDir)) {
-        @mkdir($logDir, 0755, true);
-    }
-    $ts = date('Y-m-d H:i:s');
-    $line = "[{$ts}] [DEBUG] {$label}: " . print_r($data, true) . PHP_EOL;
-    @file_put_contents(AI_LOG_FILE, $line, FILE_APPEND | LOCK_EX);
-}
-
-// ================================================================
 // LOGGING
 // ================================================================
 define('AI_LOG_FILE', __DIR__ . '/../logs/ai.log');
@@ -92,15 +79,11 @@ function aiLog(string $message, array $context = []): void {
     @file_put_contents(AI_LOG_FILE, $line, FILE_APPEND | LOCK_EX);
 }
 
-// ---- Debug inicial do ambiente ----
-debugLog('PHP_VERSION', PHP_VERSION);
-debugLog('mb_substr_exists', function_exists('mb_substr') ? 'SIM' : 'NAO');
-debugLog('mb_strlen_exists', function_exists('mb_strlen') ? 'SIM' : 'NAO');
-debugLog('mb_stripos_exists', function_exists('mb_stripos') ? 'SIM' : 'NAO');
-debugLog('allow_url_fopen', ini_get('allow_url_fopen'));
-debugLog('loaded_extensions', get_loaded_extensions());
-debugLog('GEMINI_API_KEY defined', defined('GEMINI_API_KEY') ? 'SIM' : 'NAO');
-debugLog('GEMINI_API_KEY value', defined('GEMINI_API_KEY') ? substr(GEMINI_API_KEY, 0, 8) . '...' : 'UNDEFINED');
+aiLog('Ambiente', [
+    'PHP_VERSION' => PHP_VERSION,
+    'allow_url_fopen' => ini_get('allow_url_fopen'),
+    'GEMINI_API_KEY defined' => defined('GEMINI_API_KEY') ? 'SIM' : 'NAO'
+]);
 
 // ================================================================
 // SEGURANCA
@@ -131,14 +114,12 @@ if (!$input) {
 $userMessage = isset($input['message']) ? trim($input['message']) : '';
 $history = $input['history'] ?? [];
 
-// Mensagem obrigatoria
 if ($userMessage === '') {
     http_response_code(400);
     echo json_encode(['error' => 'Mensagem vazia']);
     exit;
 }
 
-// Palavras de confirmacao
 $confirmWords = ['sim', 'confirmar', 'yes', 'ok', 'okay', 'pode apagar', 'pode criar', 'confirmo', 'estou certo'];
 
 // ================================================================
@@ -171,10 +152,8 @@ if (isset($_SESSION['ai_pending_action'])) {
         }
         $_SESSION['ai_conversation'][] = array('role' => 'user', 'text' => $userMessage);
 
-        // Construir contents para reenviar ao Gemini
         $pendingContents = buildContents($_SESSION['ai_conversation'], '');
 
-        // Adicionar functionCall (model)
         $pendingContents[] = array(
             'role'  => 'model',
             'parts' => array(array(
@@ -185,9 +164,9 @@ if (isset($_SESSION['ai_pending_action'])) {
             ))
         );
 
-        // Adicionar functionResponse (role: function)
+        // role: user para functionResponse (doc oficial Gemini)
         $pendingContents[] = array(
-            'role'  => 'function',
+            'role'  => 'user',
             'parts' => array(array(
                 'functionResponse' => array(
                     'name'     => $pending['name'],
@@ -196,7 +175,6 @@ if (isset($_SESSION['ai_pending_action'])) {
             ))
         );
 
-        // Chamar Gemini para gerar resposta natural
         $geminiResult = callGemini($pendingContents, array(array('functionDeclarations' => getToolDeclarations())));
 
         $finalText = 'Acao concluida com sucesso.';
@@ -222,7 +200,6 @@ if (isset($_SESSION['ai_pending_action'])) {
         exit;
     }
 
-    // Nao confirmou -> limpar accao pendente
     unset($_SESSION['ai_pending_action']);
 }
 
@@ -515,17 +492,14 @@ function callGemini(array $contents, array $tools = null): array {
     if ($jsonPayload === false) {
         $errMsg = 'Falha ao codificar JSON: ' . json_last_error_msg();
         aiLog('Erro JSON payload', array('error' => $errMsg));
-        debugLog('PAYLOAD_ENCODE_ERROR', $errMsg);
         return array('error' => 'PAYLOAD_ERROR', 'message' => $errMsg);
     }
 
-    // DEBUG: Log payload (sem a API key)
-    debugLog('PAYLOAD_ENVIADO (parcial)', safe_substr($jsonPayload, 0, 2000));
-
-    aiLog('Pedido a API Gemini', array(
+    aiLog('GeminiRequest', array(
         'contents_count' => count($contents),
         'payload_size'   => strlen($jsonPayload),
-        'has_tools'      => ($tools !== null && !empty($tools))
+        'has_tools'      => ($tools !== null && !empty($tools)),
+        'payload_json'   => $jsonPayload
     ));
 
     $context = stream_context_create(array(
@@ -554,87 +528,69 @@ function callGemini(array $contents, array $tools = null): array {
 
     $elapsed = round(microtime(true) - $GLOBALS['_ai_start_time'], 3);
 
-    // DEBUG: Log resposta crua
-    debugLog('HTTP_STATUS', $httpCode);
-    debugLog('HTTP_HEADERS', $responseHeaders);
-    debugLog('RESPOSTA_CRUA', $response === false ? 'FALSE (timeout/erro de conexao)' : safe_substr($response, 0, 2000));
+    // LOG: Resposta HTTP completa - codigo, headers, body cru
+    aiLog('GeminiRespostaCompleta', array(
+        'http_code'  => $httpCode,
+        'headers'    => $responseHeaders,
+        'body_raw'   => ($response === false || $response === '') ? '(vazio/false)' : $response,
+        'elapsed'    => $elapsed
+    ));
 
     if ($response === false || $response === '') {
         $errMsg = ($response === false)
             ? 'Nao foi possivel contactar a API Gemini. Timeout ou falha de conexao.'
             : 'A API Gemini devolveu uma resposta vazia.';
-        aiLog('Falha na resposta Gemini', array('http_code' => $httpCode, 'elapsed' => $elapsed, 'response' => $response));
-        return array(
-            'error'   => 'HTTP_ERROR',
-            'message' => $errMsg
-        );
+        aiLog('Falha na resposta Gemini', array('http_code' => $httpCode, 'elapsed' => $elapsed));
+        return array('error' => 'HTTP_ERROR', 'message' => $errMsg);
     }
 
-    // Tentar decodificar JSON
     $data = json_decode($response, true);
     if ($data === null) {
         $jsonErr = json_last_error_msg();
         aiLog('JSON invalido da API Gemini', array(
-            'http_code'        => $httpCode,
-            'response_snippet' => safe_substr($response, 0, 500),
-            'json_error'       => $jsonErr,
-            'elapsed'          => $elapsed
+            'http_code'  => $httpCode,
+            'raw_body'   => $response,
+            'json_error' => $jsonErr,
+            'elapsed'    => $elapsed
         ));
-        debugLog('JSON_DECODE_ERROR', $jsonErr);
-        return array(
-            'error'   => 'INVALID_JSON',
-            'message' => 'A API Gemini devolveu uma resposta invalida. Erro JSON: ' . $jsonErr
-        );
+        return array('error' => 'INVALID_JSON', 'message' => 'A API Gemini devolveu uma resposta invalida. Erro JSON: ' . $jsonErr);
     }
 
-    // DEBUG: Log JSON decodificado
-    debugLog('JSON_DECODIFICADO', $data);
-
-    aiLog('Resposta da API Gemini', array(
-        'http_code'      => $httpCode,
-        'has_candidates' => isset($data['candidates']),
-        'elapsed'        => $elapsed
+    // LOG: JSON decodificado completo
+    aiLog('GeminiRespostaJSON', array(
+        'http_code'   => $httpCode,
+        'estrutura'   => $data,
+        'elapsed'     => $elapsed
     ));
 
     if ($httpCode === 403 || $httpCode === 400) {
         $errorMsg = isset($data['error']['message']) ? $data['error']['message'] : 'Erro desconhecido';
-        aiLog('Erro HTTP da API', array('http_code' => $httpCode, 'error_msg' => $errorMsg));
+        aiLog('Erro HTTP da API', array('http_code' => $httpCode, 'resposta_completa' => $data));
         if (stripos($errorMsg, 'API_KEY') !== false || $httpCode === 403) {
-            return array(
-                'error'   => 'API_KEY_INVALID',
-                'message' => 'A chave da API Gemini e invalida. Verifique o ficheiro api/config.php. Detalhe: ' . $errorMsg
-            );
+            return array('error' => 'API_KEY_INVALID', 'message' => 'A chave da API Gemini e invalida. Verifique o ficheiro api/config.php. Detalhe: ' . $errorMsg);
         }
-        return array(
-            'error'   => 'API_ERROR',
-            'message' => 'Erro da API Gemini (HTTP ' . $httpCode . '): ' . $errorMsg
-        );
+        return array('error' => 'API_ERROR', 'message' => 'Erro da API Gemini (HTTP ' . $httpCode . '): ' . $errorMsg);
     }
 
     if ($httpCode === 429) {
-        return array(
-            'error'   => 'RATE_LIMIT',
-            'message' => 'Limite de requisicoes excedido. Tente novamente mais tarde.'
-        );
+        aiLog('Rate limit', array('resposta_completa' => $data));
+        return array('error' => 'RATE_LIMIT', 'message' => 'Limite de requisicoes excedido. Tente novamente mais tarde.');
     }
 
     if ($httpCode >= 500) {
-        return array(
-            'error'   => 'SERVER_ERROR',
-            'message' => 'O servidor Gemini esta temporariamente indisponivel (HTTP ' . $httpCode . '). Tente novamente mais tarde.'
-        );
+        aiLog('Erro servidor Gemini', array('http_code' => $httpCode, 'resposta_completa' => $data));
+        return array('error' => 'SERVER_ERROR', 'message' => 'O servidor Gemini esta temporariamente indisponivel (HTTP ' . $httpCode . '). Tente novamente mais tarde.');
     }
 
-    // Sem candidatos
+    // Sem candidatos: logar resposta COMPLETA antes de devolver erro
     if (!isset($data['candidates']) || !isset($data['candidates'][0])) {
+        aiLog('NO_CANDIDATES', array(
+            'resposta_completa' => $data,
+            'http_code'         => $httpCode,
+            'elapsed'           => $elapsed
+        ));
         $blockReason = isset($data['promptFeedback']['blockReason']) ? $data['promptFeedback']['blockReason'] : 'desconhecido';
-        $safetyRatings = isset($data['promptFeedback']['safetyRatings']) ? $data['promptFeedback']['safetyRatings'] : array();
-        aiLog('Resposta sem candidatos', array('block_reason' => $blockReason, 'safety' => $safetyRatings));
-        debugLog('SEM_CANDIDATOS', array('block_reason' => $blockReason, 'promptFeedback' => isset($data['promptFeedback']) ? $data['promptFeedback'] : 'N/A'));
-        return array(
-            'error'   => 'NO_CANDIDATES',
-            'message' => 'A IA nao conseguiu processar o pedido (motivo: ' . $blockReason . '). Verifique o log para mais detalhes.'
-        );
+        return array('error' => 'NO_CANDIDATES', 'message' => 'A IA nao conseguiu processar o pedido (motivo: ' . $blockReason . '). Resposta completa em logs/ai.log.');
     }
 
     return $data;
@@ -687,7 +643,6 @@ function processWithGemini(array $contents): array {
 
         $result = callGemini($contents, $tools);
 
-        // Erro da API
         if (isset($result['error'])) {
             $isKeyInvalid = ($result['error'] === 'API_KEY_INVALID');
             aiLog('Erro no processamento Gemini', array('error' => $result['error'], 'message' => $result['message']));
@@ -720,7 +675,6 @@ function processWithGemini(array $contents): array {
                     'requiresConfirmation' => false
                 );
             }
-            debugLog('PARTS_NULL_FULL_CANDIDATE', $candidate);
             return array(
                 'text'                 => 'Nao foi possivel gerar uma resposta (finishReason: ' . $finishReason . ').',
                 'action'               => null,
@@ -733,7 +687,6 @@ function processWithGemini(array $contents): array {
             $funcName = $part['functionCall']['name'];
             $funcArgs = isset($part['functionCall']['args']) ? $part['functionCall']['args'] : array();
 
-            // Converter args de stdClass para array se necessario
             if (is_object($funcArgs)) {
                 $funcArgs = (array)$funcArgs;
             }
@@ -782,9 +735,9 @@ function processWithGemini(array $contents): array {
                 ))
             );
 
-            // Adicionar functionResponse ao contents (role: function)
+            // Adicionar functionResponse ao contents (role: user - conforme doc oficial Gemini)
             $contents[] = array(
-                'role'  => 'function',
+                'role'  => 'user',
                 'parts' => array(array(
                     'functionResponse' => array(
                         'name'     => $funcName,
@@ -803,8 +756,6 @@ function processWithGemini(array $contents): array {
             break;
         }
 
-        // Nao e functionCall nem text -> parar
-        debugLog('PART_INESPERADO', $part);
         break;
     }
 
@@ -812,7 +763,6 @@ function processWithGemini(array $contents): array {
         $finalText = 'Nao consegui processar o seu pedido. Pode reformular?';
     }
 
-    // Atualizar historico
     if (!empty($GLOBALS['userMessage'])) {
         $_SESSION['ai_conversation'][] = array('role' => 'user', 'text' => $GLOBALS['userMessage']);
     }
@@ -834,8 +784,6 @@ try {
     $GLOBALS['userMessage'] = $userMessage;
 
     $contents = buildContents($_SESSION['ai_conversation'], $userMessage);
-
-    debugLog('CONTENTS_CONSTRUIDOS', $contents);
 
     $result = processWithGemini($contents);
 
@@ -864,17 +812,10 @@ try {
 } catch (Throwable $e) {
     $errorMsg = 'Excecao: ' . $e->getMessage() . ' em ' . $e->getFile() . ':' . $e->getLine();
     aiLog('EXCEPCAO NAO TRATADA', array('error' => $errorMsg));
-    debugLog('EXCEPTION', array(
-        'message' => $e->getMessage(),
-        'file'    => $e->getFile(),
-        'line'    => $e->getLine(),
-        'trace'   => $e->getTraceAsString()
-    ));
     http_response_code(500);
     echo json_encode(array(
         'success' => false,
-        'error'   => 'Erro interno do servidor.',
-        'debug'   => $errorMsg
+        'error'   => 'Erro interno do servidor.'
     ), JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
 }
 
