@@ -8,7 +8,7 @@
  *                                            -> Resposta natural
  *
  * Requisitos:
- *   - PHP 7.2+
+ *   - PHP 8.2+
  *   - Extensao JSON (nativa no PHP)
  *   - allow_url_fopen = On (no php.ini)
  *
