@@ -1,22 +1,60 @@
 <?php
 /**
  * api/ai.php - Assistente IA Profissional com Function Calling
- * 
+ *
  * Arquitetura segura:
- *   Browser (app.js) → api/ai.php (PHP) → Gemini 2.5 Flash API
- *                                            → Tools PHP (files, storage, etc.)
- *                                            → Resposta natural
- * 
+ *   Browser (app.js) -> api/ai.php (PHP) -> Gemini 2.5 Flash API
+ *                                            -> Tools PHP (files, storage, etc.)
+ *                                            -> Resposta natural
+ *
  * Requisitos:
  *   - PHP 7.2+
- *   - Extensão JSON (nativa no PHP)
+ *   - Extensao JSON (nativa no PHP)
  *   - allow_url_fopen = On (no php.ini)
- * 
+ *
  * @author Afonso (PAP)
- * @version 3.0
+ * @version 3.1
  */
 
-// ---- Configuração Inicial ----
+// ================================================================
+// FUNCOES DE FALLBACK PARA mb_* (defensive, sem fatal error)
+// ================================================================
+if (!function_exists('safe_substr')) {
+    function safe_substr($str, $start, $length = null) {
+        if (function_exists('mb_substr')) {
+            return $length === null ? mb_substr($str, $start) : mb_substr($str, $start, $length, 'UTF-8');
+        }
+        return $length === null ? substr($str, $start) : substr($str, $start, $length);
+    }
+}
+if (!function_exists('safe_strlen')) {
+    function safe_strlen($str) {
+        if (function_exists('mb_strlen')) {
+            return mb_strlen($str, 'UTF-8');
+        }
+        return strlen($str);
+    }
+}
+if (!function_exists('safe_strtolower')) {
+    function safe_strtolower($str) {
+        if (function_exists('mb_strtolower')) {
+            return mb_strtolower($str, 'UTF-8');
+        }
+        return strtolower($str);
+    }
+}
+if (!function_exists('safe_stripos')) {
+    function safe_stripos($haystack, $needle) {
+        if (function_exists('mb_stripos')) {
+            return mb_stripos($haystack, $needle, 0, 'UTF-8');
+        }
+        return stripos($haystack, $needle);
+    }
+}
+
+// ================================================================
+// CONFIGURACAO INICIAL
+// ================================================================
 session_start();
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/config.php';
@@ -25,7 +63,22 @@ header('Content-Type: application/json; charset=utf-8');
 
 $GLOBALS['_ai_start_time'] = microtime(true);
 
-// ---- Logging ----
+// ================================================================
+// DEBUG: LOG INICIAL COM INFORMACAO DO SISTEMA
+// ================================================================
+function debugLog($label, $data) {
+    $logDir = dirname(AI_LOG_FILE);
+    if (!is_dir($logDir)) {
+        @mkdir($logDir, 0755, true);
+    }
+    $ts = date('Y-m-d H:i:s');
+    $line = "[{$ts}] [DEBUG] {$label}: " . print_r($data, true) . PHP_EOL;
+    @file_put_contents(AI_LOG_FILE, $line, FILE_APPEND | LOCK_EX);
+}
+
+// ================================================================
+// LOGGING
+// ================================================================
 define('AI_LOG_FILE', __DIR__ . '/../logs/ai.log');
 
 function aiLog(string $message, array $context = []): void {
@@ -34,12 +87,24 @@ function aiLog(string $message, array $context = []): void {
         @mkdir($logDir, 0755, true);
     }
     $timestamp = date('Y-m-d H:i:s');
-    $contextStr = !empty($context) ? ' | ' . json_encode($context, JSON_UNESCAPED_UNICODE) : '';
+    $contextStr = !empty($context) ? ' | ' . json_encode($context, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR) : '';
     $line = "[{$timestamp}] {$message}{$contextStr}" . PHP_EOL;
     @file_put_contents(AI_LOG_FILE, $line, FILE_APPEND | LOCK_EX);
 }
 
-// ---- Segurança ----
+// ---- Debug inicial do ambiente ----
+debugLog('PHP_VERSION', PHP_VERSION);
+debugLog('mb_substr_exists', function_exists('mb_substr') ? 'SIM' : 'NAO');
+debugLog('mb_strlen_exists', function_exists('mb_strlen') ? 'SIM' : 'NAO');
+debugLog('mb_stripos_exists', function_exists('mb_stripos') ? 'SIM' : 'NAO');
+debugLog('allow_url_fopen', ini_get('allow_url_fopen'));
+debugLog('loaded_extensions', get_loaded_extensions());
+debugLog('GEMINI_API_KEY defined', defined('GEMINI_API_KEY') ? 'SIM' : 'NAO');
+debugLog('GEMINI_API_KEY value', defined('GEMINI_API_KEY') ? substr(GEMINI_API_KEY, 0, 8) . '...' : 'UNDEFINED');
+
+// ================================================================
+// SEGURANCA
+// ================================================================
 if (!isset($_SESSION['user_id'])) {
     http_response_code(403);
     echo json_encode(['error' => 'Nao autorizado']);
@@ -52,8 +117,11 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// ---- Ler input ----
-$input = json_decode(file_get_contents('php://input'), true);
+// ================================================================
+// LER INPUT
+// ================================================================
+$inputRaw = file_get_contents('php://input');
+$input = json_decode($inputRaw, true);
 if (!$input) {
     http_response_code(400);
     echo json_encode(['error' => 'JSON invalido']);
@@ -63,19 +131,21 @@ if (!$input) {
 $userMessage = isset($input['message']) ? trim($input['message']) : '';
 $history = $input['history'] ?? [];
 
-// ---- Mensagem obrigatoria ----
+// Mensagem obrigatoria
 if ($userMessage === '') {
     http_response_code(400);
     echo json_encode(['error' => 'Mensagem vazia']);
     exit;
 }
 
-// ---- Palavras de confirmacao (para respostas do utilizador) ----
+// Palavras de confirmacao
 $confirmWords = ['sim', 'confirmar', 'yes', 'ok', 'okay', 'pode apagar', 'pode criar', 'confirmo', 'estou certo'];
 
-// ---- Verificar confirmacao pendente via conversa natural ----
+// ================================================================
+// VERIFICAR CONFIRMACAO PENDENTE
+// ================================================================
 if (isset($_SESSION['ai_pending_action'])) {
-    $lowerMsg = mb_strtolower(trim($userMessage));
+    $lowerMsg = safe_strtolower(trim($userMessage));
     $isAffirmative = false;
     foreach ($confirmWords as $word) {
         if ($lowerMsg === $word || strpos($lowerMsg, $word) !== false) {
@@ -96,186 +166,183 @@ if (isset($_SESSION['ai_pending_action'])) {
             'status' => $toolResult['success'] ? 'sucesso' : 'falha'
         ]);
 
-        // Adicionar a confirmacao do utilizador ao historico
         if (!isset($_SESSION['ai_conversation'])) {
-            $_SESSION['ai_conversation'] = [];
+            $_SESSION['ai_conversation'] = array();
         }
-        $_SESSION['ai_conversation'][] = ['role' => 'user', 'text' => $userMessage];
+        $_SESSION['ai_conversation'][] = array('role' => 'user', 'text' => $userMessage);
 
-        // Construir contents com o functionCall e functionResponse e reenviar ao Gemini
+        // Construir contents para reenviar ao Gemini
         $pendingContents = buildContents($_SESSION['ai_conversation'], '');
 
-        // Adicionar functionCall ao contents
-        $pendingContents[] = [
+        // Adicionar functionCall (model)
+        $pendingContents[] = array(
             'role'  => 'model',
-            'parts' => [[
-                'functionCall' => [
+            'parts' => array(array(
+                'functionCall' => array(
                     'name' => $pending['name'],
-                    'args' => (object)$pending['args']
-                ]
-            ]]
-        ];
+                    'args' => $pending['args']
+                )
+            ))
+        );
 
-        // Adicionar functionResponse ao contents
-        $pendingContents[] = [
-            'role'  => 'user',
-            'parts' => [[
-                'functionResponse' => [
+        // Adicionar functionResponse (function)
+        $pendingContents[] = array(
+            'role'  => 'function',
+            'parts' => array(array(
+                'functionResponse' => array(
                     'name' => $pending['name'],
-                    'response' => [
+                    'response' => array(
                         'name'    => $pending['name'],
                         'content' => $toolResult
-                    ]
-                ]
-            ]]
-        ];
+                    )
+                )
+            ))
+        );
 
         // Chamar Gemini para gerar resposta natural
-        $geminiResult = callGemini($pendingContents, [
-            ['functionDeclarations' => getToolDeclarations()]
-        ]);
+        $geminiResult = callGemini($pendingContents, array(array('functionDeclarations' => getToolDeclarations())));
 
         $finalText = 'Acao concluida com sucesso.';
         if (!isset($geminiResult['error'])) {
-            $candidate = $geminiResult['candidates'][0] ?? null;
-            if ($candidate && isset($candidate['content']['parts'][0]['text'])) {
-                $finalText = trim($candidate['content']['parts'][0]['text']);
+            if (isset($geminiResult['candidates'][0]['content']['parts'][0]['text'])) {
+                $finalText = trim($geminiResult['candidates'][0]['content']['parts'][0]['text']);
             }
         }
 
-        $_SESSION['ai_conversation'][] = ['role' => 'model', 'text' => $finalText];
+        $_SESSION['ai_conversation'][] = array('role' => 'model', 'text' => $finalText);
         $_SESSION['ai_conversation'] = array_slice($_SESSION['ai_conversation'], -20);
 
-        echo json_encode([
+        echo json_encode(array(
             'success'               => true,
             'text'                  => $finalText,
             'history'               => $_SESSION['ai_conversation'],
-            'action'                => [
+            'action'                => array(
                 'name'   => $pending['name'],
                 'result' => $toolResult
-            ],
+            ),
             'requiresConfirmation'  => false
-        ], JSON_UNESCAPED_UNICODE);
+        ), JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
         exit;
     }
 
-    // Se o utilizador nao confirmou, limpar accao pendente e continuar normalmente
+    // Nao confirmou -> limpar accao pendente
     unset($_SESSION['ai_pending_action']);
 }
 
-// ---- Conversation memory (session) ----
+// ================================================================
+// CONVERSATION MEMORY (SESSION)
+// ================================================================
 if (!isset($_SESSION['ai_conversation'])) {
-    $_SESSION['ai_conversation'] = [];
+    $_SESSION['ai_conversation'] = array();
 }
 
-// Usar historico do frontend se fornecido, ou da sessaoo
 if (!empty($history)) {
     $_SESSION['ai_conversation'] = array_slice($history, -20);
 }
 
-aiLog('Mensagem recebida', [
-    'msg'           => mb_substr($userMessage, 0, 120),
+aiLog('Mensagem recebida', array(
+    'msg'           => safe_substr($userMessage, 0, 120),
     'history_items' => count($_SESSION['ai_conversation'])
-]);
+));
 
-// ============================================================
-// FERRAMENTAS (TOOLS) - Executadas localmente em PHP
-// ============================================================
+// ================================================================
+// TOOLS - EXECUTADAS LOCALMENTE
+// ================================================================
 
 function toolListarFicheiros(string $filter = 'all'): array {
     $uploadDir = __DIR__ . '/../uploads/';
     if (!is_dir($uploadDir)) {
-        return ['success' => true, 'files' => [], 'total' => 0];
+        return array('success' => true, 'files' => array(), 'total' => 0);
     }
-    $files = [];
+    $files = array();
     $scan = scandir($uploadDir);
     foreach ($scan as $file) {
         if ($file === '.' || $file === '..') continue;
         $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
         $type = 'document';
-        if (in_array($ext, ['jpg','jpeg','png','gif','webp','svg'])) $type = 'image';
-        elseif (in_array($ext, ['mp4','webm','mov'])) $type = 'video';
+        if (in_array($ext, array('jpg','jpeg','png','gif','webp','svg'))) $type = 'image';
+        elseif (in_array($ext, array('mp4','webm','mov'))) $type = 'video';
         if ($filter !== 'all' && $type !== $filter) continue;
-        $files[] = [
+        $files[] = array(
             'name' => $file,
             'type' => $type,
             'size' => round(filesize($uploadDir . $file) / 1024, 1) . ' KB',
             'date' => date('d/m/Y H:i', filemtime($uploadDir . $file))
-        ];
+        );
     }
-    return ['success' => true, 'files' => $files, 'total' => count($files)];
+    return array('success' => true, 'files' => $files, 'total' => count($files));
 }
 
 function toolPesquisarFicheiros(string $query): array {
     if ($query === '') return toolListarFicheiros('all');
     $uploadDir = __DIR__ . '/../uploads/';
     if (!is_dir($uploadDir)) {
-        return ['success' => true, 'files' => [], 'total' => 0];
+        return array('success' => true, 'files' => array(), 'total' => 0);
     }
-    $results = [];
+    $results = array();
     foreach (scandir($uploadDir) as $file) {
         if ($file === '.' || $file === '..') continue;
-        if (mb_stripos($file, $query) === false) continue;
+        if (safe_stripos($file, $query) === false) continue;
         $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
         $type = 'document';
-        if (in_array($ext, ['jpg','jpeg','png','gif','webp','svg'])) $type = 'image';
-        elseif (in_array($ext, ['mp4','webm','mov'])) $type = 'video';
-        $results[] = [
+        if (in_array($ext, array('jpg','jpeg','png','gif','webp','svg'))) $type = 'image';
+        elseif (in_array($ext, array('mp4','webm','mov'))) $type = 'video';
+        $results[] = array(
             'name' => $file,
             'type' => $type,
             'size' => round(filesize($uploadDir . $file) / 1024, 1) . ' KB'
-        ];
+        );
     }
-    return ['success' => true, 'files' => $results, 'total' => count($results)];
+    return array('success' => true, 'files' => $results, 'total' => count($results));
 }
 
 function toolCriarPasta(string $nome): array {
     $baseDir = dirname(__DIR__);
     $uploadsDir = $baseDir . DIRECTORY_SEPARATOR . 'uploads';
     if (!is_dir($uploadsDir)) {
-        return ['success' => false, 'error' => 'Diretoria de uploads nao existe'];
+        return array('success' => false, 'error' => 'Diretoria de uploads nao existe');
     }
-    $name = trim(preg_replace('/[^a-zA-Z0-9\-_.\s]/u', '', str_replace(["\\", '/', "\0"], '', $nome)));
+    $name = trim(preg_replace('/[^a-zA-Z0-9\-_.\s]/u', '', str_replace(array("\\", '/', "\0"), '', $nome)));
     $name = trim(preg_replace('/\s+/u', ' ', $name));
-    if ($name === '' || mb_strlen($name) > 80) {
-        return ['success' => false, 'error' => 'Nome de pasta invalido'];
+    if ($name === '' || safe_strlen($name) > 80) {
+        return array('success' => false, 'error' => 'Nome de pasta invalido');
     }
     if (strpos($name, '..') !== false) {
-        return ['success' => false, 'error' => 'Nome de pasta invalido'];
+        return array('success' => false, 'error' => 'Nome de pasta invalido');
     }
     $target = $uploadsDir . DIRECTORY_SEPARATOR . $name;
     if (is_dir($target)) {
-        return ['success' => false, 'error' => 'A pasta "' . $name . '" ja existe'];
+        return array('success' => false, 'error' => 'A pasta "' . $name . '" ja existe');
     }
     if (@mkdir($target, 0755)) {
-        return ['success' => true, 'pasta' => $name];
+        return array('success' => true, 'pasta' => $name);
     }
-    return ['success' => false, 'error' => 'Nao foi possivel criar a pasta'];
+    return array('success' => false, 'error' => 'Nao foi possivel criar a pasta');
 }
 
 function toolApagarFicheiro(string $nome): array {
     $filename = basename($nome);
     $file = __DIR__ . '/../uploads/' . $filename;
     if (!file_exists($file)) {
-        return ['success' => false, 'error' => 'Ficheiro nao encontrado: ' . $filename];
+        return array('success' => false, 'error' => 'Ficheiro nao encontrado: ' . $filename);
     }
     if (@unlink($file)) {
-        aiLog('Apagado pela IA', ['file' => $filename]);
-        return ['success' => true, 'ficheiro' => $filename, 'message' => 'Ficheiro apagado com sucesso'];
+        aiLog('Apagado pela IA', array('file' => $filename));
+        return array('success' => true, 'ficheiro' => $filename, 'message' => 'Ficheiro apagado com sucesso');
     }
-    return ['success' => false, 'error' => 'Nao foi possivel apagar o ficheiro'];
+    return array('success' => false, 'error' => 'Nao foi possivel apagar o ficheiro');
 }
 
 function toolPartilharFicheiro(string $nome): array {
     $uploadDir = __DIR__ . '/../uploads/';
     $filename = basename($nome);
     if (!file_exists($uploadDir . $filename)) {
-        return ['success' => false, 'error' => 'Ficheiro nao encontrado'];
+        return array('success' => false, 'error' => 'Ficheiro nao encontrado');
     }
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $base = rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'] ?? '')), '/');
     $url = $protocol . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . $base . '/uploads/' . rawurlencode($filename);
-    return ['success' => true, 'ficheiro' => $filename, 'url' => $url];
+    return array('success' => true, 'ficheiro' => $filename, 'url' => $url);
 }
 
 function toolInfoArmazenamento(): array {
@@ -295,7 +362,7 @@ function toolInfoArmazenamento(): array {
     $usedMb = round($usedBytes / 1024 / 1024, 2);
     $usedGb = round($usedBytes / 1024 / 1024 / 1024, 4);
     $percentage = min(100, max(0, round(($usedBytes / ($limitGb * 1024 * 1024 * 1024)) * 100)));
-    return [
+    return array(
         'success'    => true,
         'usedBytes'  => $usedBytes,
         'usedMb'     => $usedMb,
@@ -303,102 +370,102 @@ function toolInfoArmazenamento(): array {
         'limitGb'    => $limitGb,
         'percentage' => $percentage,
         'fileCount'  => $fileCount
-    ];
+    );
 }
 
-// ============================================================
-// FUNCTION DECLARATIONS FOR GEMINI API (Formato oficial Gemini)
-// ============================================================
+// ================================================================
+// FUNCTION DECLARATIONS (Formato oficial Gemini API)
+// ================================================================
 
 function getToolDeclarations(): array {
-    return [
-        [
+    return array(
+        array(
             'name'        => 'listar_ficheiros',
             'description' => 'Lista todos os ficheiros da nuvem. Opcionalmente filtra por tipo: all, image, video, document.',
-            'parameters'  => [
+            'parameters'  => array(
                 'type'       => 'object',
-                'properties' => [
-                    'filter' => [
+                'properties' => array(
+                    'filter' => array(
                         'type'        => 'string',
-                        'enum'        => ['all', 'image', 'video', 'document'],
+                        'enum'        => array('all', 'image', 'video', 'document'),
                         'description' => 'Filtro opcional para tipo de ficheiro (all, image, video, document)'
-                    ]
-                ]
-            ]
-        ],
-        [
+                    )
+                )
+            )
+        ),
+        array(
             'name'        => 'pesquisar_ficheiros',
             'description' => 'Pesquisa ficheiros na nuvem por nome.',
-            'parameters'  => [
+            'parameters'  => array(
                 'type'       => 'object',
-                'properties' => [
-                    'query' => [
+                'properties' => array(
+                    'query' => array(
                         'type'        => 'string',
                         'description' => 'Termo para pesquisar no nome dos ficheiros'
-                    ]
-                ],
-                'required' => ['query']
-            ]
-        ],
-        [
+                    )
+                ),
+                'required' => array('query')
+            )
+        ),
+        array(
             'name'        => 'criar_pasta',
             'description' => 'Cria uma nova pasta no diretorio de uploads para organizar ficheiros.',
-            'parameters'  => [
+            'parameters'  => array(
                 'type'       => 'object',
-                'properties' => [
-                    'nome' => [
+                'properties' => array(
+                    'nome' => array(
                         'type'        => 'string',
                         'description' => 'Nome da pasta a criar'
-                    ]
-                ],
-                'required' => ['nome']
-            ]
-        ],
-        [
+                    )
+                ),
+                'required' => array('nome')
+            )
+        ),
+        array(
             'name'        => 'apagar_ficheiro',
             'description' => 'Apaga permanentemente um ficheiro da nuvem. Requer confirmacao do utilizador antes de executar.',
-            'parameters'  => [
+            'parameters'  => array(
                 'type'       => 'object',
-                'properties' => [
-                    'nome' => [
+                'properties' => array(
+                    'nome' => array(
                         'type'        => 'string',
                         'description' => 'Nome do ficheiro a apagar'
-                    ]
-                ],
-                'required' => ['nome']
-            ]
-        ],
-        [
+                    )
+                ),
+                'required' => array('nome')
+            )
+        ),
+        array(
             'name'        => 'partilhar_ficheiro',
             'description' => 'Gera um link de partilha publico para um ficheiro.',
-            'parameters'  => [
+            'parameters'  => array(
                 'type'       => 'object',
-                'properties' => [
-                    'nome' => [
+                'properties' => array(
+                    'nome' => array(
                         'type'        => 'string',
                         'description' => 'Nome do ficheiro a partilhar'
-                    ]
-                ],
-                'required' => ['nome']
-            ]
-        ],
-        [
+                    )
+                ),
+                'required' => array('nome')
+            )
+        ),
+        array(
             'name'        => 'info_armazenamento',
             'description' => 'Mostra o espaco de armazenamento utilizado, disponivel e numero de ficheiros.',
-            'parameters'  => [
+            'parameters'  => array(
                 'type'       => 'object',
                 'properties' => new stdClass()
-            ]
-        ]
-    ];
+            )
+        )
+    );
 }
 
-// ============================================================
+// ================================================================
 // EXECUTOR DE FERRAMENTAS
-// ============================================================
+// ================================================================
 
 function executeTool(string $name, array $args): array {
-    aiLog('Ferramenta executada', ['tool' => $name, 'args' => $args]);
+    aiLog('Ferramenta executada', array('tool' => $name, 'args' => $args));
 
     switch ($name) {
         case 'listar_ficheiros':
@@ -414,59 +481,72 @@ function executeTool(string $name, array $args): array {
         case 'info_armazenamento':
             return toolInfoArmazenamento();
         default:
-            return ['success' => false, 'error' => 'Ferramenta desconhecida: ' . $name];
+            return array('success' => false, 'error' => 'Ferramenta desconhecida: ' . $name);
     }
 }
 
-// ============================================================
-// CHAMADA À API GEMINI (sem cURL, sem curl_init)
-// ============================================================
+// ================================================================
+// CHAMADA A API GEMINI
+// ================================================================
 
 function callGemini(array $contents, array $tools = null): array {
     $apiKey = defined('GEMINI_API_KEY') ? GEMINI_API_KEY : '';
-    if (empty($apiKey) || $apiKey === 'AIzaSyAquiVaTuaChaveGemini') {
-        return [
+    $defaultKey = 'AIzaSyAquiVaTuaChaveGemini';
+
+    if (empty($apiKey) || $apiKey === $defaultKey) {
+        return array(
             'error'   => 'API_KEY_INVALID',
             'message' => 'A chave da API Gemini nao esta configurada. Edite o ficheiro api/config.php com a sua chave.'
-        ];
+        );
     }
 
     $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . $apiKey;
 
-    $payload = [
+    $payload = array(
         'contents'         => $contents,
-        'generationConfig' => [
+        'generationConfig' => array(
             'temperature'     => 0.7,
             'maxOutputTokens' => 2048
-        ]
-    ];
+        )
+    );
 
     if ($tools !== null && !empty($tools)) {
         $payload['tools'] = $tools;
     }
 
-    $jsonPayload = json_encode($payload);
+    $jsonPayload = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+    if ($jsonPayload === false) {
+        $errMsg = 'Falha ao codificar JSON: ' . json_last_error_msg();
+        aiLog('Erro JSON payload', array('error' => $errMsg));
+        debugLog('PAYLOAD_ENCODE_ERROR', $errMsg);
+        return array('error' => 'PAYLOAD_ERROR', 'message' => $errMsg);
+    }
 
-    aiLog('Pedido a API Gemini', [
+    // DEBUG: Log payload (sem a API key)
+    debugLog('PAYLOAD_ENVIADO (parcial)', safe_substr($jsonPayload, 0, 2000));
+
+    aiLog('Pedido a API Gemini', array(
         'contents_count' => count($contents),
         'payload_size'   => strlen($jsonPayload),
-        'has_tools'      => $tools !== null && !empty($tools)
-    ]);
+        'has_tools'      => ($tools !== null && !empty($tools))
+    ));
 
-    $context = stream_context_create([
-        'http' => [
+    $context = stream_context_create(array(
+        'http' => array(
             'method'          => 'POST',
             'header'          => "Content-Type: application/json\r\n",
             'content'         => $jsonPayload,
             'timeout'         => 30,
             'ignore_errors'   => true
-        ]
-    ]);
+        )
+    ));
 
     $response = @file_get_contents($url, false, $context);
 
     $httpCode = 0;
+    $responseHeaders = array();
     if (isset($http_response_header) && is_array($http_response_header)) {
+        $responseHeaders = $http_response_header;
         foreach ($http_response_header as $header) {
             if (preg_match('/^HTTP\/\d\.\d\s+(\d+)/', $header, $matches)) {
                 $httpCode = (int)$matches[1];
@@ -477,291 +557,330 @@ function callGemini(array $contents, array $tools = null): array {
 
     $elapsed = round(microtime(true) - $GLOBALS['_ai_start_time'], 3);
 
-    // Timeout ou falha de conexao
-    if ($response === false) {
-        aiLog('Falha de conexao a API Gemini', ['http_code' => $httpCode, 'elapsed' => $elapsed]);
-        return [
+    // DEBUG: Log resposta crua
+    debugLog('HTTP_STATUS', $httpCode);
+    debugLog('HTTP_HEADERS', $responseHeaders);
+    debugLog('RESPOSTA_CRUA', $response === false ? 'FALSE (timeout/erro de conexao)' : safe_substr($response, 0, 2000));
+
+    if ($response === false || $response === '') {
+        $errMsg = ($response === false)
+            ? 'Nao foi possivel contactar a API Gemini. Timeout ou falha de conexao.'
+            : 'A API Gemini devolveu uma resposta vazia.';
+        aiLog('Falha na resposta Gemini', array('http_code' => $httpCode, 'elapsed' => $elapsed, 'response' => $response));
+        return array(
             'error'   => 'HTTP_ERROR',
-            'message' => 'Nao foi possivel contactar a API Gemini. Verifique a sua conexao ou tente novamente.'
-        ];
+            'message' => $errMsg
+        );
     }
 
     // Tentar decodificar JSON
     $data = json_decode($response, true);
     if ($data === null) {
-        aiLog('JSON invalido da API Gemini', [
-            'http_code'       => $httpCode,
-            'response_snippet' => mb_substr($response, 0, 300),
-            'elapsed'         => $elapsed
-        ]);
-        return [
+        $jsonErr = json_last_error_msg();
+        aiLog('JSON invalido da API Gemini', array(
+            'http_code'        => $httpCode,
+            'response_snippet' => safe_substr($response, 0, 500),
+            'json_error'       => $jsonErr,
+            'elapsed'          => $elapsed
+        ));
+        debugLog('JSON_DECODE_ERROR', $jsonErr);
+        return array(
             'error'   => 'INVALID_JSON',
-            'message' => 'A API Gemini devolveu uma resposta invalida.'
-        ];
+            'message' => 'A API Gemini devolveu uma resposta invalida. Erro JSON: ' . $jsonErr
+        );
     }
 
-    aiLog('Resposta da API Gemini', [
+    // DEBUG: Log JSON decodificado
+    debugLog('JSON_DECODIFICADO', $data);
+
+    aiLog('Resposta da API Gemini', array(
         'http_code'      => $httpCode,
         'has_candidates' => isset($data['candidates']),
         'elapsed'        => $elapsed
-    ]);
+    ));
 
-    // Erro 403 / 400 (chave invalida, etc.)
     if ($httpCode === 403 || $httpCode === 400) {
-        $errorMsg = $data['error']['message'] ?? 'Erro desconhecido';
+        $errorMsg = isset($data['error']['message']) ? $data['error']['message'] : 'Erro desconhecido';
+        aiLog('Erro HTTP da API', array('http_code' => $httpCode, 'error_msg' => $errorMsg));
         if (stripos($errorMsg, 'API_KEY') !== false || $httpCode === 403) {
-            return [
+            return array(
                 'error'   => 'API_KEY_INVALID',
-                'message' => 'A chave da API Gemini e invalida. Verifique o ficheiro api/config.php.'
-            ];
+                'message' => 'A chave da API Gemini e invalida. Verifique o ficheiro api/config.php. Detalhe: ' . $errorMsg
+            );
         }
-        return [
+        return array(
             'error'   => 'API_ERROR',
-            'message' => 'Erro da API Gemini: ' . $errorMsg
-        ];
+            'message' => 'Erro da API Gemini (HTTP ' . $httpCode . '): ' . $errorMsg
+        );
     }
 
-    // Rate limit
     if ($httpCode === 429) {
-        return [
+        return array(
             'error'   => 'RATE_LIMIT',
             'message' => 'Limite de requisicoes excedido. Tente novamente mais tarde.'
-        ];
+        );
     }
 
-    // Erro interno do servidor Gemini
     if ($httpCode >= 500) {
-        return [
+        return array(
             'error'   => 'SERVER_ERROR',
-            'message' => 'O servidor Gemini esta temporariamente indisponivel. Tente novamente mais tarde.'
-        ];
+            'message' => 'O servidor Gemini esta temporariamente indisponivel (HTTP ' . $httpCode . '). Tente novamente mais tarde.'
+        );
     }
 
-    // Sem candidatos (bloqueado por seguranca, etc.)
+    // Sem candidatos
     if (!isset($data['candidates']) || !isset($data['candidates'][0])) {
-        $blockReason = $data['promptFeedback']['blockReason'] ?? 'desconhecido';
-        aiLog('Resposta sem candidatos', ['block_reason' => $blockReason]);
-        return [
+        $blockReason = isset($data['promptFeedback']['blockReason']) ? $data['promptFeedback']['blockReason'] : 'desconhecido';
+        $safetyRatings = isset($data['promptFeedback']['safetyRatings']) ? $data['promptFeedback']['safetyRatings'] : array();
+        aiLog('Resposta sem candidatos', array('block_reason' => $blockReason, 'safety' => $safetyRatings));
+        debugLog('SEM_CANDIDATOS', array('block_reason' => $blockReason, 'promptFeedback' => isset($data['promptFeedback']) ? $data['promptFeedback'] : 'N/A'));
+        return array(
             'error'   => 'NO_CANDIDATES',
-            'message' => 'A IA nao conseguiu processar o pedido (motivo: ' . $blockReason . ').'
-        ];
+            'message' => 'A IA nao conseguiu processar o pedido (motivo: ' . $blockReason . '). Verifique o log para mais detalhes.'
+        );
     }
 
     return $data;
 }
 
-// ============================================================
-// CONSTRUIR ARRAY CONTENTS PARA A API GEMINI
-// ============================================================
+// ================================================================
+// CONSTRUIR ARRAY CONTENTS
+// ================================================================
 
 function buildContents(array $history, string $userMessage): array {
-    $contents = [];
+    $contents = array();
 
-    // Adicionar historico
     foreach ($history as $msg) {
         if (!isset($msg['role']) || !isset($msg['text'])) continue;
         $role = $msg['role'];
         if ($role !== 'user' && $role !== 'model') continue;
         $text = trim($msg['text']);
         if ($text === '') continue;
-        $contents[] = [
+        $contents[] = array(
             'role'  => $role,
-            'parts' => [['text' => $text]]
-        ];
+            'parts' => array(array('text' => $text))
+        );
     }
 
-    // Adicionar mensagem atual do utilizador
     if ($userMessage !== '') {
-        $contents[] = [
+        $contents[] = array(
             'role'  => 'user',
-            'parts' => [['text' => $userMessage]]
-        ];
+            'parts' => array(array('text' => $userMessage))
+        );
     }
 
     return $contents;
 }
 
-// ============================================================
+// ================================================================
 // PROCESSAR FUNCTION CALLING EM LOOP
-// ============================================================
+// ================================================================
 
 function processWithGemini(array $contents): array {
-    $tools = [
-        ['functionDeclarations' => getToolDeclarations()]
-    ];
+    $tools = array(
+        array('functionDeclarations' => getToolDeclarations())
+    );
 
     $maxRounds = 5;
     $finalText = '';
     $executedAction = null;
 
     for ($round = 1; $round <= $maxRounds; $round++) {
+        aiLog('=== Round ' . $round . ' de ' . $maxRounds . ' ===');
+
         $result = callGemini($contents, $tools);
 
         // Erro da API
         if (isset($result['error'])) {
             $isKeyInvalid = ($result['error'] === 'API_KEY_INVALID');
-            return [
-                'text'                 => $result['message'] ?? 'Erro ao contactar a IA.',
+            aiLog('Erro no processamento Gemini', array('error' => $result['error'], 'message' => $result['message']));
+            return array(
+                'text'                 => $result['message'],
                 'needsConfig'          => $isKeyInvalid,
                 'action'               => null,
                 'requiresConfirmation' => false
-            ];
+            );
         }
 
-        $candidate = $result['candidates'][0] ?? null;
+        $candidate = isset($result['candidates'][0]) ? $result['candidates'][0] : null;
         if ($candidate === null) {
-            return [
+            aiLog('Candidato nulo');
+            return array(
                 'text'                 => 'A IA nao conseguiu processar o pedido.',
                 'action'               => null,
                 'requiresConfirmation' => false
-            ];
+            );
         }
 
-        $part = $candidate['content']['parts'][0] ?? null;
+        $part = isset($candidate['content']['parts'][0]) ? $candidate['content']['parts'][0] : null;
         if ($part === null) {
-            $finishReason = $candidate['finishReason'] ?? 'unknown';
+            $finishReason = isset($candidate['finishReason']) ? $candidate['finishReason'] : 'unknown';
+            aiLog('Part nulo', array('finishReason' => $finishReason, 'candidate' => $candidate));
             if ($finishReason === 'SAFETY') {
-                return [
+                return array(
                     'text'                 => 'Nao posso responder a essa pergunta por questoes de seguranca.',
                     'action'               => null,
                     'requiresConfirmation' => false
-                ];
+                );
             }
-            return [
-                'text'                 => 'Nao foi possivel gerar uma resposta.',
+            debugLog('PARTS_NULL_FULL_CANDIDATE', $candidate);
+            return array(
+                'text'                 => 'Nao foi possivel gerar uma resposta (finishReason: ' . $finishReason . ').',
                 'action'               => null,
                 'requiresConfirmation' => false
-            ];
+            );
         }
 
-        // ---- Function Call detectado ----
+        // --- FUNCTION CALL ---
         if (isset($part['functionCall'])) {
             $funcName = $part['functionCall']['name'];
-            $funcArgs = $part['functionCall']['args'] ?? [];
+            $funcArgs = isset($part['functionCall']['args']) ? $part['functionCall']['args'] : array();
 
-            // Operacoes destrutivas necessitam confirmacao
-            $destructiveOps = ['apagar_ficheiro', 'criar_pasta'];
+            // Converter args de stdClass para array se necessario
+            if (is_object($funcArgs)) {
+                $funcArgs = (array)$funcArgs;
+            }
+
+            aiLog('FunctionCall recebido', array('function' => $funcName, 'args' => $funcArgs));
+
+            // Operacoes destrutivas: pedir confirmacao
+            $destructiveOps = array('apagar_ficheiro', 'criar_pasta');
             if (in_array($funcName, $destructiveOps)) {
-                $_SESSION['ai_pending_action'] = [
+                $_SESSION['ai_pending_action'] = array(
                     'name' => $funcName,
                     'args' => $funcArgs
-                ];
+                );
 
-                $actionLabels = [
+                $actionLabels = array(
                     'apagar_ficheiro' => 'apagar o ficheiro',
                     'criar_pasta'     => 'criar a pasta'
-                ];
-                $targetName = $funcArgs['nome'] ?? '';
-                $label = $actionLabels[$funcName] ?? 'executar esta acao';
+                );
+                $targetName = isset($funcArgs['nome']) ? $funcArgs['nome'] : '';
+                $label = isset($actionLabels[$funcName]) ? $actionLabels[$funcName] : 'executar esta acao';
 
-                return [
+                return array(
                     'requiresConfirmation' => true,
                     'action'               => $funcName,
                     'parameters'           => $funcArgs,
                     'text'                 => "Tem a certeza que deseja {$label} '{$targetName}'?",
-                    'history'              => $_SESSION['ai_conversation'] ?? []
-                ];
+                    'history'              => isset($_SESSION['ai_conversation']) ? $_SESSION['ai_conversation'] : array()
+                );
             }
 
             // Executar ferramenta nao destrutiva
             $toolResult = executeTool($funcName, $funcArgs);
-
-            $executedAction = [
+            $executedAction = array(
                 'name'   => $funcName,
                 'result' => $toolResult
-            ];
+            );
 
-            // Adicionar functionCall ao historico da conversa
-            $contents[] = [
+            // Adicionar functionCall ao contents (role: model)
+            $contents[] = array(
                 'role'  => 'model',
-                'parts' => [[
-                    'functionCall' => [
+                'parts' => array(array(
+                    'functionCall' => array(
                         'name' => $funcName,
-                        'args' => (object)$funcArgs
-                    ]
-                ]]
-            ];
+                        'args' => $funcArgs
+                    )
+                ))
+            );
 
-            // Adicionar functionResponse ao historico
-            $contents[] = [
-                'role'  => 'user',
-                'parts' => [[
-                    'functionResponse' => [
+            // Adicionar functionResponse ao contents (role: function)
+            $contents[] = array(
+                'role'  => 'function',
+                'parts' => array(array(
+                    'functionResponse' => array(
                         'name' => $funcName,
-                        'response' => [
+                        'response' => array(
                             'name'    => $funcName,
                             'content' => $toolResult
-                        ]
-                    ]
-                ]]
-            ];
+                        )
+                    )
+                ))
+            );
 
             continue;
         }
 
-        // ---- Resposta de texto ----
+        // --- RESPOSTA DE TEXTO ---
         if (isset($part['text'])) {
             $finalText = trim($part['text']);
+            aiLog('Resposta de texto obtida', array('length' => safe_strlen($finalText)));
             break;
         }
 
-        // Seguranca: se nao for functionCall nem text, sair
+        // Nao e functionCall nem text -> parar
+        debugLog('PART_INESPERADO', $part);
         break;
     }
 
-    // Fallback se nao houve texto
     if ($finalText === '') {
         $finalText = 'Nao consegui processar o seu pedido. Pode reformular?';
     }
 
-    // Atualizar historico da sessao
+    // Atualizar historico
     if (!empty($GLOBALS['userMessage'])) {
-        $_SESSION['ai_conversation'][] = ['role' => 'user', 'text' => $GLOBALS['userMessage']];
+        $_SESSION['ai_conversation'][] = array('role' => 'user', 'text' => $GLOBALS['userMessage']);
     }
-    $_SESSION['ai_conversation'][] = ['role' => 'model', 'text' => $finalText];
-
-    // Manter apenas as ultimas 20 mensagens
+    $_SESSION['ai_conversation'][] = array('role' => 'model', 'text' => $finalText);
     $_SESSION['ai_conversation'] = array_slice($_SESSION['ai_conversation'], -20);
 
-    return [
+    return array(
         'text'                 => $finalText,
         'action'               => $executedAction,
         'requiresConfirmation' => false
-    ];
+    );
 }
 
-// ============================================================
+// ================================================================
 // EXECUCAO PRINCIPAL
-// ============================================================
+// ================================================================
 
-$GLOBALS['userMessage'] = $userMessage;
+try {
+    $GLOBALS['userMessage'] = $userMessage;
 
-// Construir contents a partir do historico + mensagem atual
-$contents = buildContents($_SESSION['ai_conversation'], $userMessage);
+    $contents = buildContents($_SESSION['ai_conversation'], $userMessage);
 
-// Processar com Gemini Function Calling
-$result = processWithGemini($contents);
+    debugLog('CONTENTS_CONSTRUIDOS', $contents);
 
-// Construir resposta JSON consistente
-$response = [
-    'success'               => true,
-    'text'                  => $result['text'],
-    'history'               => $_SESSION['ai_conversation'],
-    'action'                => $result['action'] ?? null,
-    'requiresConfirmation'  => $result['requiresConfirmation'] ?? false
-];
+    $result = processWithGemini($contents);
 
-if (isset($result['needsConfig']) && $result['needsConfig']) {
-    $response['needsConfig'] = true;
+    $response = array(
+        'success'               => true,
+        'text'                  => $result['text'],
+        'history'               => $_SESSION['ai_conversation'],
+        'action'                => isset($result['action']) ? $result['action'] : null,
+        'requiresConfirmation'  => isset($result['requiresConfirmation']) ? $result['requiresConfirmation'] : false
+    );
+
+    if (isset($result['needsConfig']) && $result['needsConfig']) {
+        $response['needsConfig'] = true;
+    }
+
+    $totalTime = round(microtime(true) - $GLOBALS['_ai_start_time'], 3);
+    aiLog('Resposta enviada ao frontend', array(
+        'text_length'          => safe_strlen($response['text']),
+        'has_action'           => ($response['action'] !== null),
+        'requires_confirmation' => $response['requiresConfirmation'],
+        'total_time'           => $totalTime
+    ));
+
+    echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+
+} catch (Throwable $e) {
+    $errorMsg = 'Excecao: ' . $e->getMessage() . ' em ' . $e->getFile() . ':' . $e->getLine();
+    aiLog('EXCEPCAO NAO TRATADA', array('error' => $errorMsg));
+    debugLog('EXCEPTION', array(
+        'message' => $e->getMessage(),
+        'file'    => $e->getFile(),
+        'line'    => $e->getLine(),
+        'trace'   => $e->getTraceAsString()
+    ));
+    http_response_code(500);
+    echo json_encode(array(
+        'success' => false,
+        'error'   => 'Erro interno do servidor.',
+        'debug'   => $errorMsg
+    ), JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
 }
-
-$totalTime = round(microtime(true) - $GLOBALS['_ai_start_time'], 3);
-aiLog('Resposta enviada ao frontend', [
-    'text_length'          => mb_strlen($response['text']),
-    'has_action'           => $response['action'] !== null,
-    'requires_confirmation' => $response['requiresConfirmation'],
-    'total_time'           => $totalTime
-]);
-
-echo json_encode($response, JSON_UNESCAPED_UNICODE);
 
