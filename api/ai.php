@@ -185,16 +185,13 @@ if (isset($_SESSION['ai_pending_action'])) {
             ))
         );
 
-        // Adicionar functionResponse (function)
+        // Adicionar functionResponse (role: function)
         $pendingContents[] = array(
             'role'  => 'function',
             'parts' => array(array(
                 'functionResponse' => array(
-                    'name' => $pending['name'],
-                    'response' => array(
-                        'name'    => $pending['name'],
-                        'content' => $toolResult
-                    )
+                    'name'     => $pending['name'],
+                    'response' => $toolResult
                 )
             ))
         );
@@ -790,11 +787,8 @@ function processWithGemini(array $contents): array {
                 'role'  => 'function',
                 'parts' => array(array(
                     'functionResponse' => array(
-                        'name' => $funcName,
-                        'response' => array(
-                            'name'    => $funcName,
-                            'content' => $toolResult
-                        )
+                        'name'     => $funcName,
+                        'response' => $toolResult
                     )
                 ))
             );
