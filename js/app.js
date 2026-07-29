@@ -9,8 +9,9 @@ let currentVisibleFiles = [];
 let currentPreviewIndex = -1;
 let currentPreviewFile = null;
 
-// Gemini/Assistente IA
-const GEMINI_API_KEY = 'AQ.Ab8RN6K2GulpRmXbCtgKsj6h57tIfQsbOW_lwzv0L1qI3sPMPQ';
+// Estado do Assistente IA
+let aiConversationHistory = [];
+let isAiProcessing = false;
 
 function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
@@ -95,7 +96,7 @@ function initSettings() {
     motionToggle?.addEventListener('change', persistSettings);
 }
 
-// --- FUNÇÕES DE AUTENTICAÇÃO ---
+// --- FUN├ç├òES DE AUTENTICA├ç├âO ---
 
 async function checkAuth() {
     const res = await fetch('api/auth.php?action=check');
@@ -105,7 +106,7 @@ async function checkAuth() {
         if (window.location.pathname.includes('login.html')) {
             window.location.href = 'dashboard.html';
         } else {
-            document.getElementById('userDisplay').innerText = `Olá, ${data.user}`;
+            document.getElementById('userDisplay').innerText = 'Olá, ' + data.user;
             loadFiles();
         }
     } else {
@@ -146,7 +147,7 @@ async function handleLogin(e) {
         }
     } catch (err) {
         console.error(err);
-        errorMsg.textContent = 'Erro de conexão com o servidor.';
+        errorMsg.textContent = 'Erro de conex├úo com o servidor.';
         errorMsg.style.display = 'block';
     }
 }
@@ -156,7 +157,7 @@ async function handleLogout() {
     window.location.href = 'login.html';
 }
 
-// --- FUNÇÕES DO DASHBOARD (Ficheiros) ---
+// --- FUN├ç├òES DO DASHBOARD (Ficheiros) ---
 
 async function loadFiles() {
     try {
@@ -257,7 +258,7 @@ function createFileVisual(file) {
     } else if (isVideoFile(file.name)) {
         const videoPreview = document.createElement('div');
         videoPreview.className = 'card-preview-fallback video';
-        videoPreview.innerHTML = '<i class="fas fa-play"></i><span>Vídeo</span>';
+        videoPreview.innerHTML = '<i class="fas fa-play"></i><span>V├¡deo</span>';
         media.appendChild(videoPreview);
     } else if (isPdfFile(file.name)) {
         const pdfPreview = document.createElement('div');
@@ -267,7 +268,7 @@ function createFileVisual(file) {
     } else {
         const genericPreview = document.createElement('div');
         genericPreview.className = 'card-preview-fallback';
-        genericPreview.innerHTML = `<i class="fas fa-file-alt"></i><span>${getFileExtension(file.name).toUpperCase() || 'FILE'}</span>`;
+        genericPreview.innerHTML = '<i class="fas fa-file-alt"></i><span>' + (getFileExtension(file.name).toUpperCase() || 'FILE') + '</span>';
         media.appendChild(genericPreview);
     }
 
@@ -289,7 +290,7 @@ function renderFiles(files) {
     currentVisibleFiles.forEach((file, index) => {
         const card = document.createElement('div');
         card.className = 'file-card';
-        card.style.animationDelay = `${index * 60}ms`;
+        card.style.animationDelay = (index * 60) + 'ms';
 
         const preview = document.createElement('div');
         preview.className = 'card-icon';
@@ -302,8 +303,8 @@ function renderFiles(files) {
         title.textContent = file.title || file.name;
 
         const info = document.createElement('p');
-        const statusText = [file.album || 'Geral', file.shared ? 'Partilhado' : 'Pessoal'].join(' • ');
-        info.textContent = `${statusText} • ${file.size}`;
+        const statusText = [file.album || 'Geral', file.shared ? 'Partilhado' : 'Pessoal'].join(' \u2022 ');
+        info.textContent = statusText + ' \u2022 ' + file.size;
 
         const badgeRow = document.createElement('div');
         badgeRow.className = 'meta-badges';
@@ -379,8 +380,8 @@ function handleUpload(files) {
     xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
             const percentage = Math.round((event.loaded / event.total) * 100);
-            progressFill.style.width = `${percentage}%`;
-            progressText.textContent = `${percentage}%`;
+            progressFill.style.width = percentage + '%';
+            progressText.textContent = percentage + '%';
             progressLabel.textContent = percentage < 100 ? 'A enviar ficheiro...' : 'A finalizar envio...';
         } else {
             progressFill.style.width = '100%';
@@ -395,13 +396,13 @@ function handleUpload(files) {
         try {
             data = JSON.parse(xhr.responseText);
         } catch (err) {
-            console.error('Resposta inválida do upload:', err);
+            console.error('Resposta inv├ílida do upload:', err);
         }
 
         if (data.success) {
             progressFill.style.width = '100%';
             progressText.textContent = '100%';
-            progressLabel.textContent = 'Envio concluído';
+            progressLabel.textContent = 'Envio conclu├¡do';
             statusIcon.innerHTML = '<i class="fas fa-check-circle"></i>';
             progressFill.classList.add('upload-progress-fill-success');
             resultMessage.className = 'upload-result-message success';
@@ -419,7 +420,7 @@ function handleUpload(files) {
             statusIcon.innerHTML = '<i class="fas fa-times-circle"></i>';
             progressLabel.textContent = 'Falha no envio';
             resultMessage.className = 'upload-result-message error';
-            resultMessage.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${data.error || 'Não foi possível enviar o ficheiro.'}`;
+            resultMessage.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + (data.error || 'N├úo foi poss├¡vel enviar o ficheiro.');
             resultMessage.classList.remove('hidden');
             btn.innerHTML = '<i class="fas fa-exclamation-circle"></i> Falhou';
         }
@@ -430,9 +431,9 @@ function handleUpload(files) {
     xhr.onerror = () => {
         progressFill.classList.add('upload-progress-fill-error');
         statusIcon.innerHTML = '<i class="fas fa-times-circle"></i>';
-        progressLabel.textContent = 'Falha de ligação';
+        progressLabel.textContent = 'Falha de liga├º├úo';
         resultMessage.className = 'upload-result-message error';
-        resultMessage.innerHTML = '<i class="fas fa-wifi"></i> A ligação caiu durante o envio.';
+        resultMessage.innerHTML = '<i class="fas fa-wifi"></i> A liga├º├úo caiu durante o envio.';
         resultMessage.classList.remove('hidden');
         btn.innerHTML = '<i class="fas fa-exclamation-circle"></i> Falhou';
         activeUploadXhr = null;
@@ -452,25 +453,22 @@ function handleUpload(files) {
     xhr.send(formData);
 }
 
-function showToast(message, type = 'info') {
+function showToast(message, type) {
+    if (!type) type = 'info';
     const container = document.getElementById('toastContainer');
     if (!container) return;
 
     const typeMap = {
-        sucesso: { icon: '✓', className: 'toast-success' },
-        erro: { icon: '✕', className: 'toast-error' },
-        aviso: { icon: '⚠', className: 'toast-warning' },
-        info: { icon: 'ℹ', className: 'toast-info' }
+        sucesso: { icon: '\u2713', className: 'toast-success' },
+        erro: { icon: '\u2715', className: 'toast-error' },
+        aviso: { icon: '\u26A0', className: 'toast-warning' },
+        info: { icon: '\u2139', className: 'toast-info' }
     };
 
     const selectedType = typeMap[type] || typeMap.info;
     const toast = document.createElement('div');
-    toast.className = `toast ${selectedType.className}`;
-    toast.innerHTML = `
-        <span class="toast-icon">${selectedType.icon}</span>
-        <span class="toast-message">${message}</span>
-        <button class="toast-close" aria-label="Fechar notificação"><i class="fas fa-times"></i></button>
-    `;
+    toast.className = 'toast ' + selectedType.className;
+    toast.innerHTML = '<span class="toast-icon">' + selectedType.icon + '</span><span class="toast-message">' + message + '</span><button class="toast-close" aria-label="Fechar notifica├º├úo"><i class="fas fa-times"></i></button>';
 
     container.appendChild(toast);
 
@@ -489,8 +487,8 @@ function showToast(message, type = 'info') {
 }
 
 function getShareUrl(file) {
-    const baseUrl = `${window.location.origin}${window.location.pathname}`;
-    return `${baseUrl}?share=${encodeURIComponent(file.name)}`;
+    const baseUrl = window.location.origin + window.location.pathname;
+    return baseUrl + '?share=' + encodeURIComponent(file.name);
 }
 
 async function shareFile(file) {
@@ -502,12 +500,12 @@ async function shareFile(file) {
         if (navigator.share) {
             await navigator.share({
                 title: file.title || file.name,
-                text: `Veja ${file.title || file.name} no Fishelter Cloud`,
+                text: 'Veja ' + (file.title || file.name) + ' no Fishelter Cloud',
                 url: shareUrl
             });
-        } else if (navigator.clipboard?.writeText) {
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
             await navigator.clipboard.writeText(shareUrl);
-            showToast('Link copiado para a área de transferência', 'info');
+            showToast('Link copiado para a ├írea de transfer├¬ncia', 'info');
         } else {
             window.prompt('Copie este link para partilhar', shareUrl);
         }
@@ -519,7 +517,7 @@ async function shareFile(file) {
         showToast('Imagem partilhada com sucesso', 'sucesso');
     } catch (err) {
         if (err && err.name !== 'AbortError') {
-            showToast('Não foi possível partilhar esta imagem', 'erro');
+            showToast('N├úo foi poss├¡vel partilhar esta imagem', 'erro');
         }
     }
 }
@@ -544,11 +542,8 @@ function startDeleteCountdown() {
     const confirmBtn = document.getElementById('confirmDeleteBtn');
     if (!confirmBtn) return;
 
-    // Garante estado inicial
     confirmBtn.disabled = true;
     confirmBtn.textContent = 'Apagar (2)';
-
-    // Remove handlers anteriores e usa sempre o mesmo nó
     confirmBtn.onclick = null;
 
     let remaining = 2;
@@ -556,7 +551,7 @@ function startDeleteCountdown() {
     const tick = () => {
         remaining -= 1;
         if (remaining > 0) {
-            confirmBtn.textContent = `Apagar (${remaining})`;
+            confirmBtn.textContent = 'Apagar (' + remaining + ')';
             deleteCountdownTimer = setTimeout(tick, 750);
         } else {
             confirmBtn.textContent = 'Apagar';
@@ -566,10 +561,8 @@ function startDeleteCountdown() {
         }
     };
 
-
     deleteCountdownTimer = setTimeout(tick, 750);
 }
-
 
 async function deleteFile(fileName) {
     openDeleteConfirm(fileName);
@@ -581,23 +574,21 @@ async function confirmDeleteFile() {
     const fileName = pendingDeleteFileName;
     closeDeleteConfirm();
 
-    // UI: bloquear botão durante a chamada
     const confirmBtn = document.getElementById('confirmDeleteBtn');
     if (confirmBtn) {
         confirmBtn.disabled = true;
     }
 
     try {
-        const res = await fetch(`api/files.php?name=${encodeURIComponent(fileName)}`, { method: 'DELETE' });
+        const res = await fetch('api/files.php?name=' + encodeURIComponent(fileName), { method: 'DELETE' });
         const contentType = res.headers.get('content-type') || '';
-
         const data = contentType.includes('application/json') ? await res.json() : { success: false, error: await res.text().catch(() => '') };
 
         if (data.success) {
             await loadFiles();
             showToast('Ficheiro apagado com sucesso', 'sucesso');
         } else {
-            showToast(data.error || 'Não foi possível apagar o ficheiro.', 'erro');
+            showToast(data.error || 'N├úo foi poss├¡vel apagar o ficheiro.', 'erro');
         }
     } catch (err) {
         console.error('Erro ao apagar ficheiro:', err);
@@ -605,12 +596,10 @@ async function confirmDeleteFile() {
     } finally {
         if (confirmBtn) {
             confirmBtn.disabled = false;
-            // repor texto normal
             confirmBtn.textContent = 'Apagar';
         }
     }
 }
-
 
 // Filtros na Sidebar
 window.filterFiles = (type, btn) => {
@@ -639,23 +628,23 @@ async function updateStorageStats(files) {
         if (ring) {
             const radius = 46;
             const circumference = 2 * Math.PI * radius;
-            ring.style.strokeDasharray = `${circumference}`;
-            ring.style.strokeDashoffset = `${circumference}`;
+            ring.style.strokeDasharray = '' + circumference;
+            ring.style.strokeDashoffset = '' + circumference;
             ring.style.stroke = percentage >= 85 ? '#ef4444' : percentage >= 60 ? '#f59e0b' : '#10b981';
             requestAnimationFrame(() => {
                 ring.style.transition = 'stroke-dashoffset 1.5s ease-in-out';
-                ring.style.strokeDashoffset = `${circumference - (percentage / 100) * circumference}`;
+                ring.style.strokeDashoffset = '' + (circumference - (percentage / 100) * circumference);
             });
         }
 
-        if (storageText) storageText.textContent = `${percentage}%`;
-        if (usageText) usageText.textContent = `${storage.usedMb} MB de ${storage.limitGb} GB utilizados`;
+        if (storageText) storageText.textContent = percentage + '%';
+        if (usageText) usageText.textContent = storage.usedMb + ' MB de ' + storage.limitGb + ' GB utilizados';
     } catch (err) {
-        console.error('Erro ao carregar estatísticas de armazenamento:', err);
+        console.error('Erro ao carregar estat├¡sticas de armazenamento:', err);
     }
 }
 
-// Utilitários de Modal
+// Utilit├írios de Modal
 window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
 
 function renderPreviewBody(file) {
@@ -663,9 +652,9 @@ function renderPreviewBody(file) {
     if (!body) return;
 
     if (file && isImageFile(file.name)) {
-        body.innerHTML = `<img src="${file.url}" alt="${file.name}">`;
+        body.innerHTML = '<img src="' + file.url + '" alt="' + file.name + '">';
     } else {
-        body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:0.75rem;color:#64748b;font-size:1rem;"><i class="fas fa-file-alt" style="font-size:3.2rem"></i><span>${file.name}</span></div>`;
+        body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;gap:0.75rem;color:#64748b;font-size:1rem;"><i class="fas fa-file-alt" style="font-size:3.2rem"></i><span>' + file.name + '</span></div>';
     }
 }
 
@@ -676,31 +665,31 @@ function renderAiSuggestions(file) {
 
     const prompts = [
         { label: 'Descrever automaticamente', action: 'description' },
-        { label: 'Criar álbum de memórias', action: 'album' },
-        { label: 'Sugestão de partilha', action: 'share' }
+        { label: 'Criar ├ílbum de mem├│rias', action: 'album' },
+        { label: 'Sugest├úo de partilha', action: 'share' }
     ];
 
-    const aiText = file && file.aiSummary ? file.aiSummary : 'A IA pode ajudar a organizar, descrever e sugerir ações para esta imagem.';
+    const aiText = file && file.aiSummary ? file.aiSummary : 'A IA pode ajudar a organizar, descrever e sugerir a├º├Áes para esta imagem.';
     summary.textContent = aiText;
-    suggestionsList.innerHTML = prompts.map((item) => `<li><span>${item.label}</span><button type="button" data-action="${item.action}">${item.action === 'description' ? 'Aplicar' : 'Usar'}</button></li>`).join('');
+    suggestionsList.innerHTML = prompts.map((item) => '<li><span>' + item.label + '</span><button type="button" data-action="' + item.action + '">' + (item.action === 'description' ? 'Aplicar' : 'Usar') + '</button></li>').join('');
 
     suggestionsList.querySelectorAll('button').forEach((btn) => {
         btn.addEventListener('click', () => {
             if (btn.dataset.action === 'description') {
-                const nextDescription = `${file.title || file.name} — imagem com ótimo potencial para o álbum de memórias.`;
-                persistFileMetadata(file.name, { description: nextDescription, aiSummary: 'Descrição criada automaticamente pela IA.' });
+                const nextDescription = (file.title || file.name) + ' \u2014 imagem com ├│timo potencial para o ├ílbum de mem├│rias.';
+                persistFileMetadata(file.name, { description: nextDescription, aiSummary: 'Descri├º├úo criada automaticamente pela IA.' });
                 file.description = nextDescription;
-                file.aiSummary = 'Descrição criada automaticamente pela IA.';
+                file.aiSummary = 'Descri├º├úo criada automaticamente pela IA.';
                 document.getElementById('previewDescriptionInput').value = nextDescription;
                 renderAiSuggestions(file);
-                showToast('Descrição sugerida pela IA aplicada', 'info');
+                showToast('Descri├º├úo sugerida pela IA aplicada', 'info');
             } else if (btn.dataset.action === 'album') {
-                persistFileMetadata(file.name, { album: 'Memórias', aiSummary: 'Álbum sugerido pela IA: Memórias.' });
-                file.album = 'Memórias';
-                file.aiSummary = 'Álbum sugerido pela IA: Memórias.';
-                document.getElementById('previewAlbumSelect').value = 'Memórias';
+                persistFileMetadata(file.name, { album: 'Mem├│rias', aiSummary: '├ülbum sugerido pela IA: Mem├│rias.' });
+                file.album = 'Mem├│rias';
+                file.aiSummary = '├ülbum sugerido pela IA: Mem├│rias.';
+                document.getElementById('previewAlbumSelect').value = 'Mem├│rias';
                 renderAiSuggestions(file);
-                showToast('Álbum sugerido pela IA aplicado', 'info');
+                showToast('├ülbum sugerido pela IA aplicado', 'info');
             } else {
                 persistFileMetadata(file.name, { shared: true, aiSummary: 'Partilha sugerida pela IA.' });
                 file.shared = true;
@@ -743,214 +732,314 @@ function openPreview(file) {
 }
 
 // -------------------------
-// Assistente de Voz (SpeechRecognition + Gemini + SpeechSynthesis)
+// Assistente IA - Proxy Seguro via Backend (api/ai.php)
 // -------------------------
 
+async function callAiApi(message, isVoice) {
+    if (isAiProcessing) return;
+    isAiProcessing = true;
+
+    var chatInput = document.getElementById('aiChatInput');
+    var sendBtn = document.getElementById('aiSendBtn');
+    var statusEl = document.getElementById('status-assistente');
+    var voiceBtn = document.getElementById('btn-assistente');
+
+    if (chatInput) chatInput.disabled = true;
+    if (sendBtn) sendBtn.disabled = true;
+    if (voiceBtn) voiceBtn.setAttribute('disabled', 'true');
+
+    if (statusEl && isVoice) statusEl.textContent = 'A pensar...';
+    showAiTypingIndicator(true);
+
+    if (!isVoice && message.trim()) {
+        appendChatMessage(message, 'user');
+    }
+
+    try {
+        var payload = {
+            message: message.trim(),
+            history: aiConversationHistory.slice(-20)
+        };
+
+        var res = await fetch('api/ai.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            var errText = await res.text().catch(function() { return ''; });
+            throw new Error('Erro do servidor: ' + res.status + ' ' + errText);
+        }
+
+        var data = await res.json();
+
+        if (data.needsConfig) {
+            var configMsg = data.text || 'A API Gemini precisa de configuracao.';
+            appendChatMessage(configMsg, 'ai');
+            if (isVoice && statusEl) statusEl.textContent = 'Precisa de configurar a chave Gemini.';
+            speakPtPT('Preciso que configures a chave da API Gemini no ficheiro de configuracao.');
+            sessionStorage.setItem('ai_config_needed', 'true');
+            return;
+        }
+
+        var text = data.text || 'Nao percebi. Podes reformular?';
+
+        aiConversationHistory.push({ role: 'user', text: message.trim() });
+        aiConversationHistory.push({ role: 'model', text: text });
+
+        if (aiConversationHistory.length > 50) {
+            aiConversationHistory = aiConversationHistory.slice(-50);
+        }
+
+        try {
+            sessionStorage.setItem('ai_history', JSON.stringify(aiConversationHistory));
+        } catch (e) {}
+
+        appendChatMessage(text, 'ai');
+
+        if (isVoice && statusEl) {
+            statusEl.textContent = text.length > 80 ? 'IA respondeu. Ouve o audio ou ve o chat.' : 'IA: ' + text;
+        } else if (statusEl) {
+            statusEl.textContent = 'Pronto para ajudar. Clique no microfone ou escreva no chat.';
+        }
+
+        if (isVoice) speakPtPT(text);
+
+        if (data.action && data.action.result) {
+            var actionName = data.action.name;
+            var actionResult = data.action.result;
+            if (actionResult.success) {
+                if (['apagar_ficheiro', 'criar_pasta'].indexOf(actionName) !== -1) {
+                    await loadFiles();
+                }
+                if (actionName === 'apagar_ficheiro') {
+                    showToast(actionResult.message || 'Ficheiro apagado com sucesso.', 'sucesso');
+                } else if (actionName === 'criar_pasta') {
+                    showToast('Pasta "' + actionResult.pasta + '" criada com sucesso.', 'sucesso');
+                } else if (actionName === 'partilhar_ficheiro') {
+                    showToast('Link de partilha gerado para "' + actionResult.ficheiro + '".', 'info');
+                }
+            } else if (actionResult.error) {
+                showToast(actionResult.error, 'aviso');
+            }
+        }
+
+    } catch (err) {
+        console.error('Erro no assistente IA:', err);
+        var errorMsg = err.message || 'Erro ao contactar o assistente.';
+        appendChatMessage(errorMsg, 'ai');
+        if (isVoice && statusEl) statusEl.textContent = 'Erro: ' + errorMsg;
+        if (statusEl && !isVoice) statusEl.textContent = 'Erro de ligacao. Tenta novamente.';
+        speakPtPT('Desculpa, ocorreu um erro ao contactar o assistente.');
+    } finally {
+        isAiProcessing = false;
+        if (chatInput) { chatInput.disabled = false; chatInput.focus(); }
+        if (sendBtn) sendBtn.disabled = false;
+        if (voiceBtn) voiceBtn.removeAttribute('disabled');
+        showAiTypingIndicator(false);
+    }
+}
+
 function getSpeechRecognitionInstance() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     return SR ? new SR() : null;
 }
 
-
 function speakPtPT(text) {
     try {
-        const synth = window.speechSynthesis;
+        var synth = window.speechSynthesis;
         if (!synth) return;
-
         synth.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
+        var utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'pt-PT';
         utterance.rate = 1;
         utterance.pitch = 1;
         utterance.volume = 1;
         synth.speak(utterance);
     } catch (err) {
-        console.error('Erro na síntese de voz:', err);
-    }
-}
-
-function extractCreateFolderTag(text) {
-    if (typeof text !== 'string') return null;
-    const match = text.match(/\[CRIAR_PASTA:\s*([^\]]+)\s*\]/i);
-    return match ? match[1].trim() : null;
-}
-
-async function callGeminiAssistant(userText) {
-    const systemInstructions = [
-        'Tu és o assistente do Fishelter Cloud (PAP) desenvolvido pelo Afonso para a disciplina PAP.',
-        'Responde em português de Portugal.',
-        'Quando o utilizador pedir para criar uma pasta ou álbum (ex: "criar pasta de fotos"),',
-        'deves responder por voz e no final do texto incluir exatamente o padrão oculto:',
-        '[CRIAR_PASTA: Nome da Pasta]',
-        'onde Nome da Pasta é o nome que deves escolher/normalizar a partir do pedido do utilizador (sem inventar conteúdo).',
-        'Não incluas qualquer outra variação do padrão. Mantém o marcador no final da resposta.'
-    ].join('\n');
-
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + encodeURIComponent(GEMINI_API_KEY);
-
-    // PAYLOAD CORRIGIDO: Seguindo as especificações estritas da API da Gemini
-    const payload = {
-        contents: [
-            {
-                role: 'user',
-                parts: [
-                    { text: systemInstructions + "\n\nPergunta do utilizador: " + userText }
-                ]
-            }
-        ],
-        generationConfig: { 
-            temperature: 0.4, 
-            maxOutputTokens: 300 
-        }
-    };
-
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
-        const t = await res.text().catch(() => '');
-        throw new Error('Erro Gemini: ' + res.status + ' ' + t);
-    }
-
-    const data = await res.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-}
-
-async function handleAssistantCommandFromVoice(transcript) {
-    const status = document.getElementById('status-assistente');
-    const btn = document.getElementById('btn-assistente');
-
-    if (status) status.textContent = 'A pensar...';
-    btn?.setAttribute('disabled', 'true');
-
-    try {
-        const assistantText = await callGeminiAssistant(transcript);
-        if (status) status.textContent = assistantText ? `IA: ${assistantText}` : 'IA sem resposta';
-
-
-        // Detectar marcador e criar pasta
-        const createName = extractCreateFolderTag(assistantText);
-        if (createName) {
-            await fetch('api/criar_pasta.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-                body: 'nome_pasta=' + encodeURIComponent(createName)
-            }).catch((err) => console.error('Erro ao criar pasta:', err));
-        }
-
-        // Eliminar / Partilhar via marcadores no fim (formatos ocultos)
-        const deleteFileTag = (() => {
-            const m = assistantText.match(/\[APAGAR_FICHEIRO:\s*([^\]]+)\s*\]/i);
-            return m ? m[1].trim() : null;
-        })();
-
-        const shareFileTag = (() => {
-            const m = assistantText.match(/\[PARTILHAR_FICHEIRO:\s*([^\]]+)\s*\]/i);
-            return m ? m[1].trim() : null;
-        })();
-
-        if (deleteFileTag) {
-            await deleteFile(deleteFileTag);
-        }
-
-        if (shareFileTag) {
-            // procura no que carregámos; tenta por nome
-            const target = allFiles.find(f => f.name === shareFileTag) || allFiles.find(f => (f.title || '').toLowerCase() === shareFileTag.toLowerCase());
-            if (target) await shareFile(target);
-        }
-
-        // Falar sem marcadores
-        const spokenText = assistantText
-            .replace(/\[CRIAR_PASTA:\s*[^\]]+\s*\]/i, '')
-            .replace(/\[APAGAR_FICHEIRO:\s*[^\]]+\s*\]/i, '')
-            .replace(/\[PARTILHAR_FICHEIRO:\s*[^\]]+\s*\]/i, '')
-            .trim();
-
-        if (spokenText) speakPtPT(spokenText);
-        else speakPtPT('Desculpa, não percebi bem. Podes repetir?');
-
-    } catch (err) {
-        console.error(err);
-        if (status) {
-            const msg = (err && err.message) ? err.message : String(err);
-            status.textContent = 'Erro IA: ' + msg;
-        }
-        speakPtPT('Desculpa, aconteceu um erro ao contactar a IA.');
-    } finally {
-        btn?.removeAttribute('disabled');
+        console.error('Erro na sintese de voz:', err);
     }
 }
 
 function startVoiceRecognition() {
-    const btn = document.getElementById('btn-assistente');
-    const status = document.getElementById('status-assistente');
+    var btn = document.getElementById('btn-assistente');
+    var status = document.getElementById('status-assistente');
     if (status) status.textContent = 'A ouvir...';
 
-
-    const SRInstance = getSpeechRecognitionInstance();
+    var SRInstance = getSpeechRecognitionInstance();
     if (!SRInstance) {
-        if (status) status.textContent = 'Reconhecimento de voz não suportado neste navegador.';
-        speakPtPT('O reconhecimento de voz não é suportado neste navegador.');
+        if (status) status.textContent = 'Reconhecimento de voz nao suportado neste navegador.';
+        speakPtPT('O reconhecimento de voz nao e suportado neste navegador.');
         return;
     }
 
     if (btn) btn.setAttribute('disabled', 'true');
-    if (status) status.textContent = 'A ouvir...';
 
     SRInstance.lang = 'pt-PT';
     SRInstance.interimResults = false;
     SRInstance.maxAlternatives = 1;
 
-    SRInstance.onresult = async (event) => {
+    SRInstance.onresult = async function(event) {
         try {
-            const transcript = event.results?.[0]?.[0]?.transcript || '';
-            if (status && transcript && transcript.trim()) {
-                status.textContent = `Ouvi: ${transcript.trim()}`;
+            var transcript = event.results[0][0].transcript || '';
+            if (status && transcript.trim()) {
+                status.textContent = 'Ouvi: "' + transcript.trim() + '"';
             }
-
             if (!transcript.trim()) {
-                if (status) status.textContent = 'Não percebi. Podes repetir?';
-                speakPtPT('Desculpa, não percebi bem. Podes repetir?');
+                if (status) status.textContent = 'Nao percebi. Podes repetir?';
+                speakPtPT('Desculpa, nao percebi bem. Podes repetir?');
                 return;
             }
-
-            if (status) status.textContent = 'Compreendi. A pensar...';
-            await handleAssistantCommandFromVoice(transcript);
+            await callAiApi(transcript.trim(), true);
         } catch (err) {
             console.error(err);
             if (status) status.textContent = 'Erro no reconhecimento de voz.';
             speakPtPT('Desculpa, aconteceu um erro no reconhecimento de voz.');
         } finally {
-            btn?.removeAttribute('disabled');
+            if (btn) btn.removeAttribute('disabled');
         }
     };
 
-    SRInstance.onerror = (event) => {
+    SRInstance.onerror = function(event) {
         console.error('SpeechRecognition error:', event);
-        const msg = event?.error === 'not-allowed'
-            ? 'Permissão negada para microfone.'
-            : 'Não foi possível reconhecer a voz.';
+        var msg = event.error === 'not-allowed'
+            ? 'Permissao negada para microfone.'
+            : 'Nao foi possivel reconhecer a voz.';
         if (status) status.textContent = msg;
-        speakPtPT('Não consegui reconhecer a tua voz.');
-        btn?.removeAttribute('disabled');
+        speakPtPT('Nao consegui reconhecer a tua voz.');
+        if (btn) btn.removeAttribute('disabled');
     };
 
-    SRInstance.onend = () => {
-        btn?.removeAttribute('disabled');
+    SRInstance.onend = function() {
+        if (btn) btn.removeAttribute('disabled');
     };
 
     try {
         SRInstance.start();
     } catch (e) {
-        if (status) status.textContent = 'Já existe uma escuta em curso...';
-        btn?.removeAttribute('disabled');
+        if (status) status.textContent = 'Ja existe uma escuta em curso...';
+        if (btn) btn.removeAttribute('disabled');
     }
 }
 
-// --- INICIALIZAÇÃO ---
+// -------------------------
+// Chat por Texto (Interface)
+// -------------------------
+
+function toggleChatPanel() {
+    var panel = document.getElementById('aiChatPanel');
+    if (!panel) return;
+    var isOpen = panel.classList.toggle('open');
+    if (isOpen) {
+        var input = document.getElementById('aiChatInput');
+        if (input) input.focus();
+        scrollChatToBottom();
+    }
+}
+
+function sendChatMessage() {
+    var input = document.getElementById('aiChatInput');
+    if (!input) return;
+    var text = input.value.trim();
+    if (!text || isAiProcessing) return;
+    input.value = '';
+    var panel = document.getElementById('aiChatPanel');
+    if (panel && !panel.classList.contains('open')) {
+        panel.classList.add('open');
+    }
+    callAiApi(text, false);
+}
+
+function appendChatMessage(text, role) {
+    var messages = document.getElementById('aiChatMessages');
+    if (!messages) return;
+
+    var div = document.createElement('div');
+    div.className = 'chat-message ' + role + '-message';
+
+    var avatar = document.createElement('div');
+    avatar.className = 'chat-avatar';
+    avatar.innerHTML = role === 'user'
+        ? '<i class="fas fa-user"></i>'
+        : '<i class="fas fa-robot"></i>';
+
+    var bubble = document.createElement('div');
+    bubble.className = 'chat-bubble';
+
+    var processedText = text
+        .replace(/\n/g, '<br>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+    bubble.innerHTML = processedText;
+
+    var time = document.createElement('span');
+    time.className = 'chat-time';
+    time.textContent = new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+    bubble.appendChild(time);
+
+    div.appendChild(avatar);
+    div.appendChild(bubble);
+    messages.appendChild(div);
+
+    scrollChatToBottom();
+}
+
+function showAiTypingIndicator(show) {
+    var indicator = document.getElementById('aiTypingIndicator');
+    if (!indicator) return;
+    if (show) {
+        indicator.classList.remove('hidden');
+        scrollChatToBottom();
+    } else {
+        indicator.classList.add('hidden');
+    }
+}
+
+function scrollChatToBottom() {
+    var messages = document.getElementById('aiChatMessages');
+    if (messages) {
+        messages.scrollTop = messages.scrollHeight;
+    }
+}
+
+function clearAiHistory() {
+    aiConversationHistory = [];
+    try {
+        sessionStorage.removeItem('ai_history');
+    } catch (e) {}
+    var messages = document.getElementById('aiChatMessages');
+    if (messages) messages.innerHTML = '';
+    var status = document.getElementById('status-assistente');
+    if (status) status.textContent = 'Conversa reiniciada. Como posso ajudar?';
+    appendChatMessage('Ola! A conversa foi reiniciada. Como posso ajudar-te hoje?', 'ai');
+}
+
+function restoreAiHistory() {
+    try {
+        var saved = sessionStorage.getItem('ai_history');
+        if (saved) {
+            aiConversationHistory = JSON.parse(saved);
+            if (aiConversationHistory.length > 0) {
+                var messagesEl = document.getElementById('aiChatMessages');
+                if (messagesEl) {
+                    messagesEl.innerHTML = '';
+                    var recent = aiConversationHistory.slice(-6);
+                    for (var i = 0; i < recent.length; i++) {
+                        var msg = recent[i];
+                        var role = msg.role === 'user' ? 'user' : 'ai';
+                        appendChatMessage(msg.text, role);
+                    }
+                    var status = document.getElementById('status-assistente');
+                    if (status) status.textContent = 'Continuando conversa anterior. Como posso ajudar?';
+                }
+            }
+        }
+    } catch (e) {}
+}
+
+// --- INICIALIZACAO ---
 
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
@@ -1031,7 +1120,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('previewNextBtn')?.addEventListener('click', () => showPreviewAt(currentPreviewIndex + 1));
     document.getElementById('previewEditBtn')?.addEventListener('click', () => {
         document.getElementById('previewNameInput')?.focus();
-        showToast('Edição ativada para esta imagem', 'info');
+        showToast('Edicao ativada para esta imagem', 'info');
     });
     document.getElementById('previewShareBtn')?.addEventListener('click', () => {
         if (!currentPreviewFile) return;
@@ -1040,6 +1129,35 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('previewAssistantBtn')?.addEventListener('click', () => {
         if (currentPreviewFile) renderAiSuggestions(currentPreviewFile);
     });
+
+    // --- Chat IA (texto) ---
+    const chatToggleBtn = document.getElementById('aiChatToggle');
+    if (chatToggleBtn) {
+        chatToggleBtn.addEventListener('click', toggleChatPanel);
+    }
+
+    const chatSendBtn = document.getElementById('aiSendBtn');
+    if (chatSendBtn) {
+        chatSendBtn.addEventListener('click', sendChatMessage);
+    }
+
+    const chatInput = document.getElementById('aiChatInput');
+    if (chatInput) {
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendChatMessage();
+            }
+        });
+    }
+
+    const chatClearBtn = document.getElementById('aiChatClearBtn');
+    if (chatClearBtn) {
+        chatClearBtn.addEventListener('click', clearAiHistory);
+    }
+
+    // Restaurar historico da sessao anterior
+    restoreAiHistory();
 
     ['previewNameInput', 'previewDescriptionInput', 'previewAlbumSelect', 'previewStarInput', 'previewPrivateInput'].forEach((fieldId) => {
         const element = document.getElementById(fieldId);
@@ -1087,4 +1205,3 @@ document.addEventListener('DOMContentLoaded', () => {
     // Assistente IA (voz)
     document.getElementById('btn-assistente')?.addEventListener('click', () => startVoiceRecognition());
 });
-

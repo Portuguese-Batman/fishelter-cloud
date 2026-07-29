@@ -98,16 +98,50 @@
             <div id="fileGrid" class="grid-files">
                 </div>
 
-            <!-- Card do Assistente IA -->
+<!-- Card do Assistente IA -->
             <div class="ai-assistant-card">
                 <div class="ai-assistant-icon"><i class="fas fa-robot"></i></div>
                 <div class="ai-assistant-content">
                     <strong>Assistente IA</strong>
-                    <p id="status-assistente">Pronto para ajudar. Clique no microfone para começar.</p>
+                    <p id="status-assistente">Pronto para ajudar. Clique no microfone ou escreva no chat.</p>
                 </div>
-                <button id="btn-assistente" class="btn-assistente-mic" aria-label="Ativar assistente de voz" type="button">
+                <button id="aiChatToggle" class="btn-assistente-chat" aria-label="Abrir chat" type="button" title="Chat por texto">
+                    <i class="fas fa-comment-dots"></i>
+                </button>
+                <button id="btn-assistente" class="btn-assistente-mic" aria-label="Ativar assistente de voz" type="button" title="Comando de voz">
                     <i class="fas fa-microphone"></i>
                 </button>
+            </div>
+
+            <!-- Painel de Chat -->
+            <div id="aiChatPanel" class="chat-panel">
+                <div class="chat-panel-header">
+                    <div class="chat-panel-header-info">
+                        <i class="fas fa-robot"></i>
+                        <strong>Fishelter AI</strong>
+                    </div>
+                    <div class="chat-panel-header-actions">
+                        <button id="aiChatClearBtn" class="btn btn-text chat-clear-btn" type="button" title="Limpar conversa">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                        <button class="btn btn-text chat-close-btn" type="button" onclick="toggleChatPanel()" title="Fechar">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="aiChatMessages" class="chat-messages"></div>
+                <div id="aiTypingIndicator" class="chat-typing hidden">
+                    <div class="typing-dots">
+                        <span></span><span></span><span></span>
+                    </div>
+                    <span class="typing-text">A IA esta a escrever...</span>
+                </div>
+                <div class="chat-input-area">
+                    <input id="aiChatInput" type="text" class="chat-input" placeholder="Escreve uma mensagem..." autocomplete="off">
+                    <button id="aiSendBtn" class="chat-send-btn" type="button" aria-label="Enviar">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
             </div>
 
             <div id="emptyState" class="hidden" style="text-align: center; margin-top: 4rem; color: var(--text-muted);">
