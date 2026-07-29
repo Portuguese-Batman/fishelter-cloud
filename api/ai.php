@@ -13,8 +13,15 @@
  *   - allow_url_fopen = On (no php.ini)
  *
  * @author Afonso (PAP)
- * @version 3.2
+ * @version 3.4
  */
+
+// ================================================================
+// DEBUG INICIAL ABSOLUTO (antes de qualquer require)
+// ================================================================
+$debugFile = '/tmp/ai_debug.txt';
+file_put_contents($debugFile, "=== INICIO api/ai.php ===\n", FILE_APPEND);
+file_put_contents($debugFile, "1. SCRIPT START: " . date('Y-m-d H:i:s') . "\n", FILE_APPEND);
 
 // ================================================================
 // FUNCOES DE FALLBACK PARA mb_* (defensive, sem fatal error)
@@ -55,9 +62,15 @@ if (!function_exists('safe_stripos')) {
 // ================================================================
 // CONFIGURACAO INICIAL
 // ================================================================
+file_put_contents($debugFile, "2. Antes de session_start()\n", FILE_APPEND);
 session_start();
+file_put_contents($debugFile, "3. Depois de session_start()\n", FILE_APPEND);
+
 require_once __DIR__ . '/db.php';
+file_put_contents($debugFile, "4. Depois de require_once db.php\n", FILE_APPEND);
+
 require_once __DIR__ . '/config.php';
+file_put_contents($debugFile, "5. Depois de require_once config.php\n", FILE_APPEND);
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -68,6 +81,10 @@ $GLOBALS['_ai_start_time'] = microtime(true);
 // ================================================================
 define('AI_LOG_FILE', __DIR__ . '/../logs/ai.log');
 
+$logDirCheck = is_dir(dirname(AI_LOG_FILE)) ? 'SIM' : 'NAO';
+$logDirWritable = is_writable(dirname(AI_LOG_FILE)) ? 'SIM' : 'NAO';
+file_put_contents($debugFile, "6. AI_LOG_FILE=" . AI_LOG_FILE . " dir_exists={$logDirCheck} dir_writable={$logDirWritable}\n", FILE_APPEND);
+
 function aiLog(string $message, array $context = []): void {
     $logDir = dirname(AI_LOG_FILE);
     if (!is_dir($logDir)) {
@@ -76,8 +93,17 @@ function aiLog(string $message, array $context = []): void {
     $timestamp = date('Y-m-d H:i:s');
     $contextStr = !empty($context) ? ' | ' . json_encode($context, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR) : '';
     $line = "[{$timestamp}] {$message}{$contextStr}" . PHP_EOL;
-    @file_put_contents(AI_LOG_FILE, $line, FILE_APPEND | LOCK_EX);
+    $written = @file_put_contents(AI_LOG_FILE, $line, FILE_APPEND | LOCK_EX);
+    if ($written === false) {
+        $err = error_get_last();
+        file_put_contents('/tmp/ai_debug.txt', "aiLog FALHOU: " . ($err['message'] ?? 'erro desconhecido') . "\n", FILE_APPEND);
+    }
 }
+
+file_put_contents($debugFile, "7. Antes do primeiro aiLog()\n", FILE_APPEND);
+
+// ---- DEBUG: Log para ficheiro normal alem do aiLog ----
+file_put_contents(AI_LOG_FILE, "[" . date('Y-m-d H:i:s') . "] [INICIO] Script iniciado | PHP=" . PHP_VERSION . " | allow_url_fopen=" . ini_get('allow_url_fopen') . "\n", FILE_APPEND);
 
 aiLog('Ambiente', [
     'PHP_VERSION' => PHP_VERSION,
@@ -85,40 +111,58 @@ aiLog('Ambiente', [
     'GEMINI_API_KEY defined' => defined('GEMINI_API_KEY') ? 'SIM' : 'NAO'
 ]);
 
+file_put_contents($debugFile, "8. Primeiro aiLog() executado com sucesso\n", FILE_APPEND);
+
 // ================================================================
 // SEGURANCA
 // ================================================================
+file_put_contents($debugFile, "9. Verificando autenticacao...\n", FILE_APPEND);
+
 if (!isset($_SESSION['user_id'])) {
+    file_put_contents($debugFile, "10a. ERRO: user_id nao definido na sessao\n", FILE_APPEND);
     http_response_code(403);
     echo json_encode(['error' => 'Nao autorizado']);
     exit;
 }
 
+file_put_contents($debugFile, "10. user_id OK: " . $_SESSION['user_id'] . "\n", FILE_APPEND);
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    file_put_contents($debugFile, "11a. ERRO: metodo nao POST: " . $_SERVER['REQUEST_METHOD'] . "\n", FILE_APPEND);
     http_response_code(405);
     echo json_encode(['error' => 'Metodo nao permitido']);
     exit;
 }
 
+file_put_contents($debugFile, "11. Metodo POST OK\n", FILE_APPEND);
+
 // ================================================================
 // LER INPUT
 // ================================================================
 $inputRaw = file_get_contents('php://input');
+file_put_contents($debugFile, "12. Input raw length: " . strlen($inputRaw) . "\n", FILE_APPEND);
+
 $input = json_decode($inputRaw, true);
 if (!$input) {
+    file_put_contents($debugFile, "13a. ERRO: JSON invalido\n", FILE_APPEND);
     http_response_code(400);
     echo json_encode(['error' => 'JSON invalido']);
     exit;
 }
 
+file_put_contents($debugFile, "13. JSON decodificado OK\n", FILE_APPEND);
+
 $userMessage = isset($input['message']) ? trim($input['message']) : '';
 $history = $input['history'] ?? [];
 
 if ($userMessage === '') {
+    file_put_contents($debugFile, "14a. ERRO: Mensagem vazia\n", FILE_APPEND);
     http_response_code(400);
     echo json_encode(['error' => 'Mensagem vazia']);
     exit;
 }
+
+file_put_contents($debugFile, "14. Mensagem OK: " . safe_substr($userMessage, 0, 50) . "\n", FILE_APPEND);
 
 $confirmWords = ['sim', 'confirmar', 'yes', 'ok', 'okay', 'pode apagar', 'pode criar', 'confirmo', 'estou certo'];
 
@@ -126,6 +170,7 @@ $confirmWords = ['sim', 'confirmar', 'yes', 'ok', 'okay', 'pode apagar', 'pode c
 // VERIFICAR CONFIRMACAO PENDENTE
 // ================================================================
 if (isset($_SESSION['ai_pending_action'])) {
+    file_put_contents($debugFile, "15. Acao pendente encontrada\n", FILE_APPEND);
     $lowerMsg = safe_strtolower(trim($userMessage));
     $isAffirmative = false;
     foreach ($confirmWords as $word) {
@@ -140,12 +185,6 @@ if (isset($_SESSION['ai_pending_action'])) {
         unset($_SESSION['ai_pending_action']);
 
         $toolResult = executeTool($pending['name'], $pending['args']);
-
-        aiLog('Confirmacao executada', [
-            'action' => $pending['name'],
-            'args'   => $pending['args'],
-            'status' => $toolResult['success'] ? 'sucesso' : 'falha'
-        ]);
 
         if (!isset($_SESSION['ai_conversation'])) {
             $_SESSION['ai_conversation'] = array();
@@ -164,7 +203,6 @@ if (isset($_SESSION['ai_pending_action'])) {
             ))
         );
 
-        // role: user para functionResponse (doc oficial Gemini)
         $pendingContents[] = array(
             'role'  => 'user',
             'parts' => array(array(
@@ -182,6 +220,8 @@ if (isset($_SESSION['ai_pending_action'])) {
             if (isset($geminiResult['candidates'][0]['content']['parts'][0]['text'])) {
                 $finalText = trim($geminiResult['candidates'][0]['content']['parts'][0]['text']);
             }
+        } else {
+            $finalText = $geminiResult['message'] ?? 'Erro ao processar confirmacao.';
         }
 
         $_SESSION['ai_conversation'][] = array('role' => 'model', 'text' => $finalText);
@@ -214,10 +254,7 @@ if (!empty($history)) {
     $_SESSION['ai_conversation'] = array_slice($history, -20);
 }
 
-aiLog('Mensagem recebida', array(
-    'msg'           => safe_substr($userMessage, 0, 120),
-    'history_items' => count($_SESSION['ai_conversation'])
-));
+file_put_contents($debugFile, "16. Historico: " . count($_SESSION['ai_conversation']) . " itens\n", FILE_APPEND);
 
 // ================================================================
 // TOOLS - EXECUTADAS LOCALMENTE
@@ -301,7 +338,6 @@ function toolApagarFicheiro(string $nome): array {
         return array('success' => false, 'error' => 'Ficheiro nao encontrado: ' . $filename);
     }
     if (@unlink($file)) {
-        aiLog('Apagado pela IA', array('file' => $filename));
         return array('success' => true, 'ficheiro' => $filename, 'message' => 'Ficheiro apagado com sucesso');
     }
     return array('success' => false, 'error' => 'Nao foi possivel apagar o ficheiro');
@@ -439,8 +475,6 @@ function getToolDeclarations(): array {
 // ================================================================
 
 function executeTool(string $name, array $args): array {
-    aiLog('Ferramenta executada', array('tool' => $name, 'args' => $args));
-
     switch ($name) {
         case 'listar_ficheiros':
             return toolListarFicheiros($args['filter'] ?? 'all');
@@ -491,16 +525,18 @@ function callGemini(array $contents, array $tools = null): array {
     $jsonPayload = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
     if ($jsonPayload === false) {
         $errMsg = 'Falha ao codificar JSON: ' . json_last_error_msg();
-        aiLog('Erro JSON payload', array('error' => $errMsg));
+        file_put_contents('/tmp/ai_debug.txt', "callGemini: JSON encode failed: {$errMsg}\n", FILE_APPEND);
+        aiLog('ERRO callGemini', array('error' => $errMsg));
         return array('error' => 'PAYLOAD_ERROR', 'message' => $errMsg);
     }
 
-    aiLog('GeminiRequest', array(
-        'contents_count' => count($contents),
-        'payload_size'   => strlen($jsonPayload),
-        'has_tools'      => ($tools !== null && !empty($tools)),
-        'payload_json'   => $jsonPayload
-    ));
+    // LOG: Payload enviado (JSON completo)
+    aiLog('PAYLOAD ENVIADO', array('payload' => $jsonPayload));
+
+    file_put_contents('/tmp/ai_debug.txt', "callGemini: A enviar request para Gemini API (payload size: " . strlen($jsonPayload) . ")\n", FILE_APPEND);
+
+    // LOG: JSON enviado para debug
+    file_put_contents('/tmp/ai_debug.txt', "callGemini JSON ENVIADO:\n" . $jsonPayload . "\n", FILE_APPEND);
 
     $context = stream_context_create(array(
         'http' => array(
@@ -515,9 +551,7 @@ function callGemini(array $contents, array $tools = null): array {
     $response = @file_get_contents($url, false, $context);
 
     $httpCode = 0;
-    $responseHeaders = array();
     if (isset($http_response_header) && is_array($http_response_header)) {
-        $responseHeaders = $http_response_header;
         foreach ($http_response_header as $header) {
             if (preg_match('/^HTTP\/\d\.\d\s+(\d+)/', $header, $matches)) {
                 $httpCode = (int)$matches[1];
@@ -528,69 +562,87 @@ function callGemini(array $contents, array $tools = null): array {
 
     $elapsed = round(microtime(true) - $GLOBALS['_ai_start_time'], 3);
 
-    // LOG: Resposta HTTP completa - codigo, headers, body cru
-    aiLog('GeminiRespostaCompleta', array(
-        'http_code'  => $httpCode,
-        'headers'    => $responseHeaders,
-        'body_raw'   => ($response === false || $response === '') ? '(vazio/false)' : $response,
-        'elapsed'    => $elapsed
-    ));
+    file_put_contents('/tmp/ai_debug.txt', "callGemini: HTTP {$httpCode} elapsed={$elapsed}s\n", FILE_APPEND);
+
+    // LOG: HTTP STATUS
+    aiLog('HTTP STATUS', array('status' => $httpCode, 'elapsed' => $elapsed));
+
+    // LOG: Resposta completa da Google
+    if ($response === false || $response === '') {
+        aiLog('RESPOSTA COMPLETA GOOGLE', array('response' => '(resposta vazia ou false)'));
+    } else {
+        aiLog('RESPOSTA COMPLETA GOOGLE', array('response' => $response));
+        file_put_contents('/tmp/ai_debug.txt', "callGemini JSON RECEBIDO:\n" . $response . "\n", FILE_APPEND);
+    }
 
     if ($response === false || $response === '') {
         $errMsg = ($response === false)
             ? 'Nao foi possivel contactar a API Gemini. Timeout ou falha de conexao.'
             : 'A API Gemini devolveu uma resposta vazia.';
-        aiLog('Falha na resposta Gemini', array('http_code' => $httpCode, 'elapsed' => $elapsed));
+        file_put_contents('/tmp/ai_debug.txt', "callGemini: {$errMsg}\n", FILE_APPEND);
         return array('error' => 'HTTP_ERROR', 'message' => $errMsg);
     }
 
     $data = json_decode($response, true);
     if ($data === null) {
         $jsonErr = json_last_error_msg();
-        aiLog('JSON invalido da API Gemini', array(
-            'http_code'  => $httpCode,
-            'raw_body'   => $response,
-            'json_error' => $jsonErr,
-            'elapsed'    => $elapsed
-        ));
+        file_put_contents('/tmp/ai_debug.txt', "callGemini: JSON decode error: {$jsonErr}\n", FILE_APPEND);
+        aiLog('ERRO JSON RECEBIDO', array('error' => $jsonErr));
         return array('error' => 'INVALID_JSON', 'message' => 'A API Gemini devolveu uma resposta invalida. Erro JSON: ' . $jsonErr);
     }
 
-    // LOG: JSON decodificado completo
-    aiLog('GeminiRespostaJSON', array(
-        'http_code'   => $httpCode,
-        'estrutura'   => $data,
-        'elapsed'     => $elapsed
-    ));
+    // LOG: JSON recebido decodificado
+    aiLog('JSON RECEBIDO DECODIFICADO', array('data_keys' => array_keys($data)));
 
-    if ($httpCode === 403 || $httpCode === 400) {
-        $errorMsg = isset($data['error']['message']) ? $data['error']['message'] : 'Erro desconhecido';
-        aiLog('Erro HTTP da API', array('http_code' => $httpCode, 'resposta_completa' => $data));
+    // Verificar promptFeedback
+    if (isset($data['promptFeedback'])) {
+        $promptFeedback = $data['promptFeedback'];
+        aiLog('PROMPT FEEDBACK', array('promptFeedback' => $promptFeedback));
+        // Se estiver bloqueado, reportar ao utilizador
+        if (isset($promptFeedback['blockReason'])) {
+            return array(
+                'error'   => 'BLOCKED',
+                'message' => 'O pedido foi bloqueado pela Gemini. Motivo: ' . $promptFeedback['blockReason']
+            );
+        }
+    }
+
+    // Verificar error.message da API
+    if (isset($data['error']['message'])) {
+        $errorMsg = $data['error']['message'];
+        aiLog('ERRO API GEMINI', array('error' => $errorMsg));
+        file_put_contents('/tmp/ai_debug.txt', "callGemini: API error: {$errorMsg}\n", FILE_APPEND);
+
         if (stripos($errorMsg, 'API_KEY') !== false || $httpCode === 403) {
             return array('error' => 'API_KEY_INVALID', 'message' => 'A chave da API Gemini e invalida. Verifique o ficheiro api/config.php. Detalhe: ' . $errorMsg);
         }
-        return array('error' => 'API_ERROR', 'message' => 'Erro da API Gemini (HTTP ' . $httpCode . '): ' . $errorMsg);
+        return array('error' => 'API_ERROR', 'message' => 'Erro da API Gemini: ' . $errorMsg);
+    }
+
+    if ($httpCode === 403) {
+        return array(
+            'error'   => 'API_KEY_INVALID',
+            'message' => 'A chave da API Gemini e invalida ou nao tem permissoes. Verifique o ficheiro api/config.php.'
+        );
+    }
+
+    if ($httpCode === 400) {
+        $errorMsg = isset($data['error']['message']) ? $data['error']['message'] : 'Erro de requisicao invalida';
+        return array('error' => 'API_ERROR', 'message' => 'Erro da API Gemini (HTTP 400): ' . $errorMsg);
     }
 
     if ($httpCode === 429) {
-        aiLog('Rate limit', array('resposta_completa' => $data));
         return array('error' => 'RATE_LIMIT', 'message' => 'Limite de requisicoes excedido. Tente novamente mais tarde.');
     }
 
     if ($httpCode >= 500) {
-        aiLog('Erro servidor Gemini', array('http_code' => $httpCode, 'resposta_completa' => $data));
         return array('error' => 'SERVER_ERROR', 'message' => 'O servidor Gemini esta temporariamente indisponivel (HTTP ' . $httpCode . '). Tente novamente mais tarde.');
     }
 
-    // Sem candidatos: logar resposta COMPLETA antes de devolver erro
     if (!isset($data['candidates']) || !isset($data['candidates'][0])) {
-        aiLog('NO_CANDIDATES', array(
-            'resposta_completa' => $data,
-            'http_code'         => $httpCode,
-            'elapsed'           => $elapsed
-        ));
         $blockReason = isset($data['promptFeedback']['blockReason']) ? $data['promptFeedback']['blockReason'] : 'desconhecido';
-        return array('error' => 'NO_CANDIDATES', 'message' => 'A IA nao conseguiu processar o pedido (motivo: ' . $blockReason . '). Resposta completa em logs/ai.log.');
+        file_put_contents('/tmp/ai_debug.txt', "callGemini: NO_CANDIDATES reason={$blockReason}\n", FILE_APPEND);
+        return array('error' => 'NO_CANDIDATES', 'message' => 'A IA nao conseguiu processar o pedido (motivo: ' . $blockReason . ').');
     }
 
     return $data;
@@ -637,15 +689,16 @@ function processWithGemini(array $contents): array {
     $maxRounds = 5;
     $finalText = '';
     $executedAction = null;
+    $needsConfig = false;
 
     for ($round = 1; $round <= $maxRounds; $round++) {
-        aiLog('=== Round ' . $round . ' de ' . $maxRounds . ' ===');
+        file_put_contents('/tmp/ai_debug.txt', "processWithGemini: Round {$round}/{$maxRounds}\n", FILE_APPEND);
 
         $result = callGemini($contents, $tools);
 
         if (isset($result['error'])) {
             $isKeyInvalid = ($result['error'] === 'API_KEY_INVALID');
-            aiLog('Erro no processamento Gemini', array('error' => $result['error'], 'message' => $result['message']));
+            file_put_contents('/tmp/ai_debug.txt', "processWithGemini: Erro no round {$round}: " . $result['error'] . "\n", FILE_APPEND);
             return array(
                 'text'                 => $result['message'],
                 'needsConfig'          => $isKeyInvalid,
@@ -656,7 +709,7 @@ function processWithGemini(array $contents): array {
 
         $candidate = isset($result['candidates'][0]) ? $result['candidates'][0] : null;
         if ($candidate === null) {
-            aiLog('Candidato nulo');
+            file_put_contents('/tmp/ai_debug.txt', "processWithGemini: Candidato nulo no round {$round}\n", FILE_APPEND);
             return array(
                 'text'                 => 'A IA nao conseguiu processar o pedido.',
                 'action'               => null,
@@ -667,7 +720,7 @@ function processWithGemini(array $contents): array {
         $part = isset($candidate['content']['parts'][0]) ? $candidate['content']['parts'][0] : null;
         if ($part === null) {
             $finishReason = isset($candidate['finishReason']) ? $candidate['finishReason'] : 'unknown';
-            aiLog('Part nulo', array('finishReason' => $finishReason, 'candidate' => $candidate));
+            file_put_contents('/tmp/ai_debug.txt', "processWithGemini: Part nulo, finishReason={$finishReason}\n", FILE_APPEND);
             if ($finishReason === 'SAFETY') {
                 return array(
                     'text'                 => 'Nao posso responder a essa pergunta por questoes de seguranca.',
@@ -691,9 +744,8 @@ function processWithGemini(array $contents): array {
                 $funcArgs = (array)$funcArgs;
             }
 
-            aiLog('FunctionCall recebido', array('function' => $funcName, 'args' => $funcArgs));
+            file_put_contents('/tmp/ai_debug.txt', "processWithGemini: FunctionCall {$funcName} args=" . json_encode($funcArgs) . "\n", FILE_APPEND);
 
-            // Operacoes destrutivas: pedir confirmacao
             $destructiveOps = array('apagar_ficheiro', 'criar_pasta');
             if (in_array($funcName, $destructiveOps)) {
                 $_SESSION['ai_pending_action'] = array(
@@ -708,6 +760,8 @@ function processWithGemini(array $contents): array {
                 $targetName = isset($funcArgs['nome']) ? $funcArgs['nome'] : '';
                 $label = isset($actionLabels[$funcName]) ? $actionLabels[$funcName] : 'executar esta acao';
 
+                file_put_contents('/tmp/ai_debug.txt', "processWithGemini: A pedir confirmacao para {$funcName}\n", FILE_APPEND);
+
                 return array(
                     'requiresConfirmation' => true,
                     'action'               => $funcName,
@@ -717,14 +771,12 @@ function processWithGemini(array $contents): array {
                 );
             }
 
-            // Executar ferramenta nao destrutiva
             $toolResult = executeTool($funcName, $funcArgs);
             $executedAction = array(
                 'name'   => $funcName,
                 'result' => $toolResult
             );
 
-            // Adicionar functionCall ao contents (role: model)
             $contents[] = array(
                 'role'  => 'model',
                 'parts' => array(array(
@@ -735,7 +787,6 @@ function processWithGemini(array $contents): array {
                 ))
             );
 
-            // Adicionar functionResponse ao contents (role: user - conforme doc oficial Gemini)
             $contents[] = array(
                 'role'  => 'user',
                 'parts' => array(array(
@@ -752,7 +803,7 @@ function processWithGemini(array $contents): array {
         // --- RESPOSTA DE TEXTO ---
         if (isset($part['text'])) {
             $finalText = trim($part['text']);
-            aiLog('Resposta de texto obtida', array('length' => safe_strlen($finalText)));
+            file_put_contents('/tmp/ai_debug.txt', "processWithGemini: Texto obtido no round {$round}: " . safe_substr($finalText, 0, 100) . "\n", FILE_APPEND);
             break;
         }
 
@@ -761,18 +812,16 @@ function processWithGemini(array $contents): array {
 
     if ($finalText === '') {
         $finalText = 'Nao consegui processar o seu pedido. Pode reformular?';
+        file_put_contents('/tmp/ai_debug.txt', "processWithGemini: Texto vazio, a usar fallback\n", FILE_APPEND);
     }
 
-    if (!empty($GLOBALS['userMessage'])) {
-        $_SESSION['ai_conversation'][] = array('role' => 'user', 'text' => $GLOBALS['userMessage']);
-    }
-    $_SESSION['ai_conversation'][] = array('role' => 'model', 'text' => $finalText);
-    $_SESSION['ai_conversation'] = array_slice($_SESSION['ai_conversation'], -20);
-
+    // Retornar apenas os dados, sem echo nem atualizacao de historico aqui
     return array(
         'text'                 => $finalText,
         'action'               => $executedAction,
-        'requiresConfirmation' => false
+        'needsConfig'          => $needsConfig,
+        'requiresConfirmation' => false,
+        'history'              => null
     );
 }
 
@@ -781,18 +830,45 @@ function processWithGemini(array $contents): array {
 // ================================================================
 
 try {
-    $GLOBALS['userMessage'] = $userMessage;
-
+    // Construir contents a partir do historico e mensagem do utilizador
     $contents = buildContents($_SESSION['ai_conversation'], $userMessage);
 
+    // Processar com Gemini
     $result = processWithGemini($contents);
 
+    // Se requer confirmacao, retornar resposta sem atualizar historico
+    if (isset($result['requiresConfirmation']) && $result['requiresConfirmation']) {
+        $totalTime = round(microtime(true) - $GLOBALS['_ai_start_time'], 3);
+        aiLog('Resposta de confirmacao enviada', array(
+            'action'     => $result['action'] ?? 'desconhecida',
+            'total_time' => $totalTime
+        ));
+
+        echo json_encode(array(
+            'success'               => true,
+            'text'                  => $result['text'],
+            'action'                => $result['action'] ?? null,
+            'parameters'            => $result['parameters'] ?? null,
+            'requiresConfirmation'  => true,
+            'history'               => $result['history'] ?? $_SESSION['ai_conversation']
+        ), JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+        exit;
+    }
+
+    // Atualizar historico da sessao
+    $_SESSION['ai_conversation'][] = array('role' => 'user', 'text' => $userMessage);
+    if (!empty($result['text'])) {
+        $_SESSION['ai_conversation'][] = array('role' => 'model', 'text' => $result['text']);
+    }
+    $_SESSION['ai_conversation'] = array_slice($_SESSION['ai_conversation'], -20);
+
+    // Construir resposta final
     $response = array(
         'success'               => true,
         'text'                  => $result['text'],
         'history'               => $_SESSION['ai_conversation'],
-        'action'                => isset($result['action']) ? $result['action'] : null,
-        'requiresConfirmation'  => isset($result['requiresConfirmation']) ? $result['requiresConfirmation'] : false
+        'action'                => $result['action'] ?? null,
+        'requiresConfirmation'  => false
     );
 
     if (isset($result['needsConfig']) && $result['needsConfig']) {
@@ -812,6 +888,7 @@ try {
 } catch (Throwable $e) {
     $errorMsg = 'Excecao: ' . $e->getMessage() . ' em ' . $e->getFile() . ':' . $e->getLine();
     aiLog('EXCEPCAO NAO TRATADA', array('error' => $errorMsg));
+    file_put_contents('/tmp/ai_debug.txt', "EXCEPCAO: {$errorMsg}\n", FILE_APPEND);
     http_response_code(500);
     echo json_encode(array(
         'success' => false,
